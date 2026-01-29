@@ -1,10 +1,10 @@
 """Agent 单元测试"""
 
 import pytest
-from app.agent import should_retrieve, retrieve_knowledge, generate_response, reflect_on_answer
+from src.agents.nodes import check_node, retrieve_node
 
 
-class TestShouldRetrieve:
+class TestCheckNode:
     """测试知识检索判断"""
 
     @pytest.mark.asyncio
@@ -19,7 +19,7 @@ class TestShouldRetrieve:
             "reflection": "",
         }
 
-        result = await should_retrieve(state)
+        result = await check_node(state)
         assert result["need_knowledge"] is False
 
     @pytest.mark.asyncio
@@ -34,29 +34,12 @@ class TestShouldRetrieve:
             "reflection": "",
         }
 
-        result = await should_retrieve(state)
+        result = await check_node(state)
         assert result["need_knowledge"] is True
 
 
-class TestRetrieveKnowledge:
+class TestRetrieveNode:
     """测试知识检索"""
-
-    @pytest.mark.asyncio
-    async def test_retrieve_when_needed(self, mock_tavily):
-        """需要检索时调用 Tavily"""
-        state = {
-            "messages": [type("Msg", (), {"content": "测试问题"})()],
-            "knowledge_context": "",
-            "need_knowledge": True,
-            "reflection": "",
-        }
-
-        # 需要设置 TAVILY_API_KEY
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("app.knowledge.TAVILY_API_KEY", "test-key")
-            result = await retrieve_knowledge(state)
-
-        assert "knowledge_context" in result
 
     @pytest.mark.asyncio
     async def test_skip_when_not_needed(self):
@@ -68,5 +51,18 @@ class TestRetrieveKnowledge:
             "reflection": "",
         }
 
-        result = await retrieve_knowledge(state)
+        result = await retrieve_node(state)
         assert result["knowledge_context"] == ""
+
+    @pytest.mark.asyncio
+    async def test_retrieve_when_needed(self, mock_knowledge_service):
+        """需要检索时调用服务"""
+        state = {
+            "messages": [type("Msg", (), {"content": "测试问题"})()],
+            "knowledge_context": "",
+            "need_knowledge": True,
+            "reflection": "",
+        }
+
+        result = await retrieve_node(state)
+        assert "knowledge_context" in result

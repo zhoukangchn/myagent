@@ -23,7 +23,7 @@ install: ## 安装依赖
 	uv sync
 
 dev: ## 启动开发服务器
-	$(PYTHON) -m app.main
+	$(PYTHON) -m src.api.app
 
 format: ## 格式化代码
 	$(RUFF) format .
@@ -32,16 +32,16 @@ lint: ## 检查代码规范
 	$(RUFF) check . --fix
 
 typecheck: ## 类型检查
-	$(PYTHON) -m mypy app --ignore-missing-imports
+	$(PYTHON) -m mypy src --ignore-missing-imports
 
 test: ## 运行测试
 	$(PYTEST) tests/ -v
 
 test-cov: ## 运行测试并生成覆盖率报告
-	$(PYTEST) tests/ -v --cov=app --cov-report=html --cov-report=term
+	$(PYTEST) tests/ -v --cov=src --cov-report=html --cov-report=term
 
 serve: ## 启动生产服务器
-	$(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+	$(PYTHON) -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000
 
 clean: ## 清理缓存文件
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

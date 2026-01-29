@@ -10,16 +10,16 @@ class TestHealthEndpoints:
 
     def test_root(self):
         """测试根路径"""
-        from app.main import app
+        from src.api.app import app
         client = TestClient(app)
 
         response = client.get("/")
         assert response.status_code == 200
-        assert response.json()["status"] == "ok"
+        assert response.json()["status"] == "healthy"
 
     def test_health(self):
         """测试健康检查"""
-        from app.main import app
+        from src.api.app import app
         client = TestClient(app)
 
         response = client.get("/health")
@@ -32,7 +32,7 @@ class TestChatEndpoint:
 
     def test_chat_request_validation(self):
         """测试请求验证"""
-        from app.main import app
+        from src.api.app import app
         client = TestClient(app)
 
         # 缺少 message 字段
@@ -42,9 +42,9 @@ class TestChatEndpoint:
     @pytest.mark.asyncio
     async def test_chat_success(self):
         """测试聊天成功响应"""
-        from app.main import app
+        from src.api.app import app
 
-        with patch("app.main.agent") as mock_agent:
+        with patch("src.api.routes.chat.agent") as mock_agent:
             mock_agent.ainvoke = AsyncMock(return_value={
                 "messages": [type("Msg", (), {"content": "测试回复"})()],
                 "knowledge_context": "some context",

@@ -19,6 +19,34 @@
                                     [不满意] 重新检索（最多3轮）
 ```
 
+## 📁 项目结构
+
+```
+rag-test/
+├── src/
+│   ├── api/                    # FastAPI 层
+│   │   ├── app.py              # 应用入口
+│   │   ├── schemas.py          # 请求/响应模型
+│   │   └── routes/             # 路由
+│   │       ├── chat.py         # 聊天接口
+│   │       └── health.py       # 健康检查
+│   ├── agents/                 # LangGraph Agent 层
+│   │   ├── graph.py            # Graph 构建
+│   │   ├── nodes.py            # 节点定义
+│   │   └── state.py            # 状态定义
+│   ├── services/               # 外部服务
+│   │   ├── knowledge.py        # Tavily 知识检索
+│   │   └── llm.py              # LLM 服务
+│   └── core/                   # 核心模块
+│       ├── config.py           # 配置管理
+│       └── logging.py          # 日志
+├── tests/                      # 测试
+├── .github/workflows/          # CI/CD
+├── Makefile                    # 常用命令
+├── Dockerfile                  # Docker 构建
+└── docker-compose.yml          # Docker Compose
+```
+
 ## 🚀 快速开始
 
 ### 环境要求
@@ -93,25 +121,6 @@ make all           # 运行所有检查
 uv run pre-commit install
 ```
 
-## 📁 项目结构
-
-```
-rag-test/
-├── app/
-│   ├── __init__.py
-│   ├── config.py        # 配置管理
-│   ├── knowledge.py     # 知识检索（Tavily）
-│   ├── agent.py         # LangGraph Agent
-│   └── main.py          # FastAPI 入口
-├── tests/               # 测试
-├── .github/workflows/   # CI/CD
-├── Makefile             # 常用命令
-├── Dockerfile           # Docker 构建
-├── docker-compose.yml   # Docker Compose
-├── AGENTS.md            # AI 编码指南
-└── README.md            # 本文件
-```
-
 ## 🔧 配置
 
 | 环境变量 | 说明 | 必填 |
@@ -119,6 +128,7 @@ rag-test/
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | ✅ |
 | `TAVILY_API_KEY` | Tavily API Key | ✅ |
 | `DEEPSEEK_MODEL` | 模型名称 | ❌ (默认: deepseek-chat) |
+| `MAX_ITERATIONS` | 最大反思轮次 | ❌ (默认: 3) |
 
 ## 📄 License
 

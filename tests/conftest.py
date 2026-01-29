@@ -7,21 +7,16 @@ from unittest.mock import AsyncMock, patch
 @pytest.fixture
 def mock_llm():
     """Mock DeepSeek LLM"""
-    with patch("app.agent.llm") as mock:
+    with patch("src.agents.nodes.llm") as mock:
         mock.ainvoke = AsyncMock(return_value=AsyncMock(content="NO"))
         yield mock
 
 
 @pytest.fixture
-def mock_tavily():
-    """Mock Tavily 搜索"""
-    with patch("app.knowledge.AsyncTavilyClient") as mock:
-        client = AsyncMock()
-        client.search = AsyncMock(return_value={
-            "answer": "这是测试答案",
-            "results": [
-                {"content": "测试内容", "url": "https://example.com", "score": 0.9}
-            ]
-        })
-        mock.return_value = client
+def mock_knowledge_service():
+    """Mock 知识检索服务"""
+    with patch("src.agents.nodes.knowledge_service") as mock:
+        mock.search = AsyncMock(return_value=[
+            {"content": "测试内容", "source": "https://example.com", "score": 0.9}
+        ])
         yield mock
