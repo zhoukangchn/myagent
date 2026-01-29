@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     used_knowledge: bool
+    iterations: int  # 反思迭代次数
 
 
 @app.get("/")
@@ -42,6 +43,10 @@ async def chat(request: ChatRequest):
             "messages": [HumanMessage(content=request.message)],
             "knowledge_context": "",
             "need_knowledge": False,
+            "current_answer": "",
+            "reflection": "",
+            "is_satisfied": False,
+            "iteration": 0,
         }
         
         # 运行 agent
@@ -51,8 +56,9 @@ async def chat(request: ChatRequest):
         messages = result.get("messages", [])
         reply = messages[-1].content if messages else "抱歉，我无法生成回复。"
         used_knowledge = bool(result.get("knowledge_context"))
+        iterations = result.get("iteration", 1)
         
-        return ChatResponse(reply=reply, used_knowledge=used_knowledge)
+        return ChatResponse(reply=reply, used_knowledge=used_knowledge, iterations=iterations)
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
