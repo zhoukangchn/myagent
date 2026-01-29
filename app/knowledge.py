@@ -1,38 +1,49 @@
-"""外部知识接口调用"""
+"""Tavily 知识检索"""
 
-import httpx
-from app.config import KNOWLEDGE_API_URL, KNOWLEDGE_API_KEY
+from tavily import AsyncTavilyClient
+from app.config import TAVILY_API_KEY
 
 
 async def search_knowledge(query: str) -> list[dict]:
     """
-    调用外部知识接口搜索相关内容
+    使用 Tavily 搜索相关内容
     
     返回格式: [{"content": "...", "source": "...", "score": 0.9}, ...]
-    
-    TODO: 根据实际接口调整请求格式和响应解析
     """
-    if not KNOWLEDGE_API_URL:
+    if not TAVILY_API_KEY:
+        print("警告: 未配置 TAVILY_API_KEY")
         return []
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        headers = {}
-        if KNOWLEDGE_API_KEY:
-            headers["Authorization"] = f"Bearer {KNOWLEDGE_API_KEY}"
+    try:
+        client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
         
-        try:
-            response = await client.post(
-                KNOWLEDGE_API_URL,
-                headers=headers,
-                json={"query": query, "top_k": 5}
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            # TODO: 根据实际返回格式解析
-            # 假设返回 {"results": [{"content": "...", "source": "..."}]}
-            return data.get("results", [])
+        response = await client.search(
+            query=query,
+            search_depth="basic",  # "basic" 免费，"advanced" 消耗更多额度
+            max_results=5,
+            include_answer=True,   # 让 Tavily 生成一个简短答案
+        )
         
-        except Exception as e:
-            print(f"知识接口调用失败: {e}")
-            return []
+        results = []
+        
+        # 如果有直接答案，加到最前面
+        if response.get("answer"):
+            results.append({
+                "content": response["answer"],
+                "source": "Tavily AI Summary",
+                "score": 1.0
+            })
+        
+        # 添加搜索结果
+        for item in response.get("results", []):
+            results.append({
+                "content": item.get("content", ""),
+                "source": item.get("url", ""),
+                "score": item.get("score", 0.0)
+            })
+        
+        return results
+    
+    except Exception as e:
+        print(f"Tavily 搜索失败: {e}")
+        return []
