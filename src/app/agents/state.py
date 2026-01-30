@@ -24,3 +24,6 @@ class AgentState(TypedDict):
 
     # 控制
     iteration: int
+
+    # 多智能体扩展
+    next_agent: str
