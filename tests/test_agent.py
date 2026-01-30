@@ -66,4 +66,5 @@ class TestRetrieveNode:
         }
 
         result = await retrieve_node(state)
+        mock_knowledge_service.search.assert_called_once()
         assert "knowledge_context" in result
