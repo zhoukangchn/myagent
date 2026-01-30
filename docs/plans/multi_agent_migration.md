@@ -21,8 +21,8 @@ Transform the existing single-agent reflective RAG loop into a modular multi-age
 - [x] Implement `reviewer_node` (Reflection focus).
 
 ## Phase 3: Graph Re-construction
-- [ ] Update `src/app/agents/graph.py` to use the new multi-agent flow.
-- [ ] Implement a `router` for dynamic handoffs.
+- [x] Update `src/app/agents/graph.py` to use the new multi-agent flow.
+- [x] Implement a `router` for dynamic handoffs.
 
 ## Phase 4: Verification & Deployment
 - [ ] Write integration tests for the full multi-agent graph.
