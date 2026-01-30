@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     
     # Agent
     max_iterations: int = 3
+
+    # Huawei Cloud
+    huawei_iam_endpoint: str = "https://iam.myhuaweicloud.com/v3/auth/tokens"
+    huawei_domain_name: str = ""
+    huawei_username: str = ""
+    huawei_password: str = ""
+    huawei_project_name: str = ""
+
     
     class Config:
         env_file = ".env"

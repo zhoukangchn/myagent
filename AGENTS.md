@@ -37,12 +37,14 @@ uv run python -m pytest       # 运行测试（如有）
 - ✅ 类型注解完整
 - ✅ 新功能有对应测试
 - ✅ 文档已更新（如涉及 API 变更）
+- ✅ 测试代码放置在 `tests/` 目录下（禁止在 `scripts/` 放临时测试脚本）
 
 ### 禁止事项
 
 - ❌ 提交 `.env` 文件（含敏感信息）
 - ❌ 硬编码 API Key
 - ❌ 未经测试的 Agent 流程变更
+- ❌ 将测试脚本散落在项目根目录或 `scripts/`（必须进 `tests/` 并遵循 pytest 规范）
 
 ---
 
@@ -50,16 +52,34 @@ uv run python -m pytest       # 运行测试（如有）
 
 ```
 rag-test/
-├── app/
-│   ├── __init__.py
-│   ├── config.py        # 配置管理（环境变量）
-│   ├── knowledge.py     # 知识检索（Tavily）
-│   ├── agent.py         # LangGraph Agent 核心逻辑
-│   └── main.py          # FastAPI 入口
-├── tests/               # 测试目录（待创建）
+├── src/
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── graph.py         # Agent 流程构建
+│   │   ├── nodes.py         # 节点逻辑 (check, retrieve, generate...)
+│   │   └── state.py         # 状态定义
+│   ├── api/
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py      # 聊天接口
+│   │   │   └── health.py    # 健康检查
+│   │   ├── __init__.py
+│   │   ├── app.py           # FastAPI App 工厂
+│   │   └── schemas.py       # Pydantic 模型
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py        # 配置管理
+│   │   └── logging.py       # 日志配置
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── knowledge.py     # 知识检索服务
+│   │   └── llm.py           # LLM 服务
+│   └── __init__.py
+├── tests/               # 测试目录
 ├── .env                 # 环境变量（不提交）
 ├── .env.example         # 环境变量模板
 ├── pyproject.toml       # 项目配置
+├── Makefile             # 常用命令快捷方式
 ├── AGENTS.md            # 本文件
 └── README.md            # 项目说明
 ```
@@ -68,10 +88,11 @@ rag-test/
 
 | 文件 | 职责 | 修改注意事项 |
 |------|------|--------------|
-| `agent.py` | Agent 核心流程 | 修改后必须测试 `/chat/stream` |
-| `knowledge.py` | 知识检索 | 接口变更需同步更新 agent.py |
-| `main.py` | API 入口 | 保持 stream/non-stream 行为一致 |
-| `config.py` | 配置管理 | 新增配置需同步 .env.example |
+| `src/agents/graph.py` | Agent 流程图 | 修改后必须测试 `/chat/stream` |
+| `src/agents/nodes.py` | 节点逻辑 | 核心业务逻辑所在 |
+| `src/services/knowledge.py` | 知识检索 | 接口变更需同步更新 nodes.py |
+| `src/api/app.py` | API 入口 | FastAPI 应用配置 |
+| `src/core/config.py` | 配置管理 | 新增配置需同步 .env.example |
 
 ---
 
@@ -127,8 +148,8 @@ from fastapi import FastAPI
 from langchain_openai import ChatOpenAI
 
 # 3. 本地模块
-from app.config import DEEPSEEK_API_KEY
-from app.knowledge import search_knowledge
+from src.core.config import settings
+from src.services.knowledge import search_knowledge
 ```
 
 ### 注释语言
@@ -148,7 +169,8 @@ from app.knowledge import search_knowledge
 cd ~/rag-test
 
 # 安装依赖
-uv sync
+make install
+# 或者: uv sync
 
 # 配置环境变量
 cp .env.example .env
@@ -159,7 +181,8 @@ cp .env.example .env
 
 ```bash
 # 启动开发服务器（热重载）
-uv run python -m app.main
+make dev
+# 或者: uv run python -m src.api.app
 
 # 访问 API 文档
 open http://localhost:8000/docs
@@ -173,16 +196,16 @@ curl -N -X POST http://localhost:8000/chat/stream \
   -d '{"message": "2024年诺贝尔物理学奖是谁"}'
 ```
 
-### 常用命令
+### 常用命令 (Makefile)
 
 | 命令 | 说明 |
 |------|------|
-| `uv sync` | 同步依赖 |
-| `uv add <pkg>` | 添加依赖 |
-| `uv run python -m app.main` | 启动服务 |
-| `uv run ruff format .` | 格式化代码 |
-| `uv run ruff check .` | 检查代码 |
-| `uv run pytest` | 运行测试 |
+| `make install` | 安装依赖 |
+| `make dev` | 启动开发服务器 |
+| `make format` | 格式化代码 (ruff) |
+| `make lint` | 检查代码规范 |
+| `make test` | 运行测试 |
+| `make all` | 运行所有检查 (fmt+lint+test) |
 
 ### Git 工作流
 
@@ -191,8 +214,7 @@ curl -N -X POST http://localhost:8000/chat/stream \
 git checkout -b feat/xxx
 
 # 2. 开发并验证
-uv run ruff format .
-uv run ruff check . --fix
+make all
 
 # 3. 提交（使用 conventional commits）
 git commit -m "feat: add xxx feature"
