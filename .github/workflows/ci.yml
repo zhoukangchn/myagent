@@ -34,10 +34,10 @@ jobs:
         run: uv run ruff check .
 
       - name: Type check
-        run: uv run mypy app --ignore-missing-imports
+        run: uv run mypy src --ignore-missing-imports
 
       - name: Run tests
-        run: uv run pytest tests/ -v --cov=app --cov-report=xml
+        run: uv run pytest tests/ -v --cov=src --cov-report=xml
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
