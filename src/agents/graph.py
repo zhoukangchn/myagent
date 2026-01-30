@@ -1,15 +1,15 @@
 """Agent Graph 构建"""
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
-from src.agents.state import AgentState
 from src.agents.nodes import (
     check_node,
-    retrieve_node,
+    finalize_node,
     generate_node,
     reflect_node,
-    finalize_node,
+    retrieve_node,
 )
+from src.agents.state import AgentState
 
 
 def route_after_check(state: AgentState) -> str:
@@ -29,30 +29,26 @@ def route_after_reflect(state: AgentState) -> str:
 def build_graph():
     """构建 Agent Graph"""
     graph = StateGraph(AgentState)
-    
+
     # 添加节点
     graph.add_node("check", check_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("generate", generate_node)
     graph.add_node("reflect", reflect_node)
     graph.add_node("finalize", finalize_node)
-    
+
     # 添加边
     graph.add_edge(START, "check")
     graph.add_conditional_edges(
-        "check",
-        route_after_check,
-        {"retrieve": "retrieve", "generate": "generate"}
+        "check", route_after_check, {"retrieve": "retrieve", "generate": "generate"}
     )
     graph.add_edge("retrieve", "generate")
     graph.add_edge("generate", "reflect")
     graph.add_conditional_edges(
-        "reflect",
-        route_after_reflect,
-        {"finalize": "finalize", "check": "check"}
+        "reflect", route_after_reflect, {"finalize": "finalize", "check": "check"}
     )
     graph.add_edge("finalize", END)
-    
+
     return graph.compile()
 
 

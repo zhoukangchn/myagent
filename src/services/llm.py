@@ -1,6 +1,7 @@
 """LLM 服务"""
 
 from langchain_openai import ChatOpenAI
+
 from src.core.config import settings
 
 

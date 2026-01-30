@@ -1,12 +1,12 @@
 """华为云认证服务"""
 
-import httpx
 import logging
-from typing import Optional
+
+import httpx
+
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
-
 
 
 class HuaweiAuthService:
@@ -19,7 +19,7 @@ class HuaweiAuthService:
         self.password = settings.huawei_password
         self.project_name = settings.huawei_project_name
 
-    async def get_token(self) -> Optional[str]:
+    async def get_token(self) -> str | None:
         """获取华为云 IAM Token (X-Subject-Token)"""
         if not all([self.domain_name, self.username, self.password]):
             logger.error("Missing Huawei Cloud credentials in settings")
@@ -33,21 +33,13 @@ class HuaweiAuthService:
                         "user": {
                             "name": self.username,
                             "password": self.password,
-                            "domain": {
-                                "name": self.domain_name
-                            }
+                            "domain": {"name": self.domain_name},
                         }
-                    }
+                    },
                 },
-                "scope": {
-                    "project": {
-                        "name": self.project_name
-                    }
-                } if self.project_name else {
-                    "domain": {
-                        "name": self.domain_name
-                    }
-                }
+                "scope": {"project": {"name": self.project_name}}
+                if self.project_name
+                else {"domain": {"name": self.domain_name}},
             }
         }
 
@@ -56,12 +48,9 @@ class HuaweiAuthService:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    self.auth_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=10.0
+                    self.auth_url, json=payload, headers=headers, timeout=10.0
                 )
-                
+
                 if response.status_code == 201:
                     token = response.headers.get("X-Subject-Token")
                     if token:

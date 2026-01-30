@@ -3,8 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.core.config import settings
 from src.api.routes import chat, health
+from src.core.config import settings
 
 
 def create_app() -> FastAPI:
@@ -16,7 +16,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
-    
+
     # CORS
     app.add_middleware(
         CORSMiddleware,
@@ -25,11 +25,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # 注册路由
     app.include_router(health.router)
     app.include_router(chat.router)
-    
+
     return app
 
 
@@ -38,4 +38,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)

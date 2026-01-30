@@ -1,7 +1,8 @@
 """测试配置"""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -16,7 +17,7 @@ def mock_llm():
 def mock_knowledge_service():
     """Mock 知识检索服务"""
     with patch("src.agents.nodes.knowledge_service") as mock:
-        mock.search = AsyncMock(return_value=[
-            {"content": "测试内容", "source": "https://example.com", "score": 0.9}
-        ])
+        mock.search = AsyncMock(
+            return_value=[{"content": "测试内容", "source": "https://example.com", "score": 0.9}]
+        )
         yield mock
