@@ -25,8 +25,8 @@ Transform the existing single-agent reflective RAG loop into a modular multi-age
 - [x] Implement a `router` for dynamic handoffs.
 
 ## Phase 4: Verification & Deployment
-- [ ] Write integration tests for the full multi-agent graph.
-- [ ] Verify all tests pass.
+- [x] Write integration tests for the full multi-agent graph.
+- [x] Verify all tests pass.
 - [ ] Commit changes using `git-essentials`.
 
 ---
