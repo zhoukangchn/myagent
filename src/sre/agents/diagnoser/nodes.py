@@ -29,7 +29,10 @@ async def generate_hypothesis_node(state: DiagnoserState) -> Dict[str, Any]:
         {"hypothesis": "数据库连接池配置过小", "confidence": 0.8, "evidence": ["Connection pool exhausted logs"]},
         {"hypothesis": "下游服务响应慢导致连接积压", "confidence": 0.5, "evidence": ["Increased request latency"]}
     ]
+    
+    from src.sre.agents.shared.state import IncidentStatus
     return {
         "current_hypotheses": hypotheses,
-        "is_satisfied": True
+        "is_satisfied": True,
+        "status": IncidentStatus.EXECUTING
     }

@@ -53,6 +53,9 @@ async def verify_result_node(state: ExecutorState) -> Dict[str, Any]:
     # TODO: 重新调用 Monitor Agent 的逻辑来核实指标是否恢复正常
     verification = "Pod 重启后，CPU 使用率已从 92% 降至 15%，连接数恢复正常。"
     logger.info(f"[Executor] 验证结果: {verification}")
+    
+    from src.sre.agents.shared.state import IncidentStatus
     return {
-        "diagnosis_report": state.get("diagnosis_report", "") + "\n\n[Verification] " + verification
+        "diagnosis_report": state.get("diagnosis_report", "") + "\n\n[Verification] " + verification,
+        "status": IncidentStatus.RESOLVED
     }

@@ -23,6 +23,10 @@ async def router_node(state: SREState) -> Literal["monitor", "diagnoser", "execu
     status = state.get("status")
     logger.info(f"[Supervisor] 当前事件状态: {status}")
 
+    # 获取允许的状态转换（虽然目前仅用于日志和防御）
+    allowed = get_allowed_transitions(status)
+    logger.debug(f"[Supervisor] 允许的后续状态: {allowed}")
+
     if status == IncidentStatus.MONITORING:
         return "monitor"
     elif status == IncidentStatus.DIAGNOSING:
@@ -32,7 +36,10 @@ async def router_node(state: SREState) -> Literal["monitor", "diagnoser", "execu
     elif status in [IncidentStatus.RESOLVED, IncidentStatus.REJECTED, IncidentStatus.ESCALATED]:
         return "end"
     
-    # 默认兜底
+    # 如果状态不在预期内，尝试根据状态转换逻辑进行防御性路由
+    if IncidentStatus.MONITORING in allowed:
+        return "monitor"
+    
     return "end"
 
 async def finalize_report_node(state: SREState) -> Dict[str, Any]:

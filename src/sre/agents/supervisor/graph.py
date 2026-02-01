@@ -40,11 +40,10 @@ def build_supervisor_graph():
         }
     )
     
-    # 子 Agent 完成后，统一回到路由点（或根据业务逻辑跳转）
-    # 为简单起见，这里演示一条直线流程，实际可以更复杂
-    builder.add_edge("monitor_agent", "diagnoser_agent")
-    builder.add_edge("diagnoser_agent", "executor_agent")
-    builder.add_edge("executor_agent", "finalize")
+    # 子 Agent 完成后，回归路由中心
+    builder.add_edge("monitor_agent", "initialize")
+    builder.add_edge("diagnoser_agent", "initialize")
+    builder.add_edge("executor_agent", "initialize")
     
     builder.add_edge("finalize", END)
     

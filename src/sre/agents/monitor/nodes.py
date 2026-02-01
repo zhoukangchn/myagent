@@ -36,4 +36,9 @@ async def gather_context_node(state: MonitorState) -> Dict[str, Any]:
         "infrastructure": "AWS EKS",
         "region": "us-east-1"
     }
-    return {"time_context": context}
+    # 更新状态机
+    from src.sre.agents.shared.state import IncidentStatus
+    return {
+        "time_context": context,
+        "status": IncidentStatus.DIAGNOSING
+    }
