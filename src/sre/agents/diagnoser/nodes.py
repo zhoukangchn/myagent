@@ -35,10 +35,21 @@ async def query_knowledge_node(state: DiagnoserState) -> Dict[str, Any]:
         except Exception as e:
             logger.error(f"[Diagnoser] 调用外部诊断服务失败: {e}")
 
-    # 如果没有配置 URL 或调用失败，使用本地默认逻辑兜底
+    # 如果没有配置 URL 或调用失败，使用 Mock 数据
     if not context:
-        logger.info("[Diagnoser] 使用本地知识库逻辑兜底")
-        context = "根据本地记录，'Connection pool exhausted' 通常与数据库连接未正常释放或突发高并发有关。"
+        logger.info("[Diagnoser] 使用 Mock 诊断建议 (外部服务未配置)")
+        mock_responses = {
+            "Connection pool exhausted": "建议增加数据库最大连接数，并检查应用层是否存在连接泄露。",
+            "CPU usage": "指标显示计算密集型任务激增，建议横向扩容或检查死循环代码。",
+            "Latency": "发现下游依赖响应变慢，建议开启熔断机制或增加重试间隔。"
+        }
+        # 简单的关键词匹配逻辑
+        logs_str = str(state["monitor_data"].get("log_entries", ""))
+        context = "根据 Mock 专家库建议：可能是由于流量激增导致的资源瓶颈，建议重启服务释放资源。"
+        for key, val in mock_responses.items():
+            if key in logs_str:
+                context = f"根据 Mock 专家库建议: {val}"
+                break
     
     return {"knowledge_context": context}
 
