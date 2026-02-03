@@ -7,10 +7,26 @@ async def sentinel_node(state: WarroomState) -> Dict[str, Any]:
     Sentinel (哨兵): 接收并规范化告警。
     """
     logger.info("[Warroom] Sentinel 正在处理告警...")
-    # TODO: 实现对接云平台 Webhook 的逻辑
+    
+    raw_alert = state.get("raw_alert")
+    if not raw_alert:
+        logger.warning("[Warroom] 未发现原始告警数据 (raw_alert)")
+        return {
+            "incident_id": "UNKNOWN",
+            "incident_severity": "P3",
+            "incident_status": "open",
+            "next_agent": "end"
+        }
+
+    # 规范化告警字段
+    incident_id = raw_alert.get("id", "INC-GENERIC")
+    severity = raw_alert.get("severity", "P2")
+    
+    logger.info(f"[Warroom] 告警已规范化: ID={incident_id}, Severity={severity}")
+    
     return {
-        "incident_id": "INC-20260131-001",
-        "incident_severity": "P1",
+        "incident_id": incident_id,
+        "incident_severity": severity,
         "incident_status": "open",
         "next_agent": "strategist"
     }
