@@ -3,7 +3,6 @@
 管理 IncidentStatus 的合法转换和验证逻辑。
 """
 
-
 from src.sre.agents.shared.state import IncidentStatus
 
 # 定义状态转换规则：{当前状态: {可以跳转的下一个状态}}
