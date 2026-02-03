@@ -1,5 +1,6 @@
 """配置管理"""
 
+import urllib.parse
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -37,10 +38,11 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """根据配置生成异步数据库连接字符串"""
+        """根据配置生成异步数据库连接字符串（包含密码转义）"""
+        safe_password = urllib.parse.quote_plus(self.db_password)
         if self.db_type.lower() == "mysql":
-            return f"mysql+aiomysql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
-        return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+            return f"mysql+aiomysql://{self.db_user}:{safe_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+asyncpg://{self.db_user}:{safe_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     # API Auth (User & Password for URL calls)
     api_auth_username: str = ""
