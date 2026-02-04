@@ -7,7 +7,7 @@ from src.app.core.config import settings
 class HTTPClient:
     """
     A dual-mode (Async/Sync) HTTP client utility using httpx.
-    Provides persistent connection pooling for both asynchronous and synchronous requests.
+    Provides persistent connection pooling with per-request overrides for SSL verification.
     """
     def __init__(
         self, 
@@ -22,8 +22,8 @@ class HTTPClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        # Use provided verify or fallback to global settings
-        self.verify = verify if verify is not None else settings.http_verify_ssl
+        # Default verify setting from arguments or global config
+        self.default_verify = verify if verify is not None else settings.http_verify_ssl
         
         # Async members
         self._async_client: Optional[httpx.AsyncClient] = None
@@ -37,11 +37,12 @@ class HTTPClient:
     async def get_async_client(self) -> httpx.AsyncClient:
         async with self._async_lock:
             if self._async_client is None or self._async_client.is_closed:
+                # Note: The client-level verify is set to the default
                 self._async_client = httpx.AsyncClient(
                     base_url=self.base_url,
                     timeout=self.timeout,
                     headers=self.headers,
-                    verify=self.verify,
+                    verify=self.default_verify,
                     limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
                 )
             return self._async_client
@@ -59,9 +60,12 @@ class HTTPClient:
         params: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        verify: Optional[bool] = None,
         **kwargs
     ) -> Any:
         client = await self.get_async_client()
+        # Per-request verify override
+        # Note: httpx allows passing 'verify' to request() even if the client has its own default
         try:
             response = await client.request(
                 method=method,
@@ -69,17 +73,18 @@ class HTTPClient:
                 params=params,
                 json=json_data,
                 headers=headers,
+                verify=verify if verify is not None else self.default_verify,
                 **kwargs
             )
             return self._handle_response(response, method, endpoint)
         except Exception as e:
             self._handle_error(e, method, endpoint)
 
-    async def get(self, endpoint: str, **kwargs) -> Any:
-        return await self.request_async("GET", endpoint, **kwargs)
+    async def get(self, endpoint: str, verify: Optional[bool] = None, **kwargs) -> Any:
+        return await self.request_async("GET", endpoint, verify=verify, **kwargs)
 
-    async def post(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, **kwargs) -> Any:
-        return await self.request_async("POST", endpoint, json_data=json_data, **kwargs)
+    async def post(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, verify: Optional[bool] = None, **kwargs) -> Any:
+        return await self.request_async("POST", endpoint, json_data=json_data, verify=verify, **kwargs)
 
     # --- Synchronous Implementation ---
 
@@ -89,7 +94,7 @@ class HTTPClient:
                 base_url=self.base_url,
                 timeout=self.timeout,
                 headers=self.headers,
-                verify=self.verify,
+                verify=self.default_verify,
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=50)
             )
         return self._sync_client
@@ -106,6 +111,7 @@ class HTTPClient:
         params: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        verify: Optional[bool] = None,
         **kwargs
     ) -> Any:
         client = self.get_sync_client()
@@ -116,17 +122,18 @@ class HTTPClient:
                 params=params,
                 json=json_data,
                 headers=headers,
+                verify=verify if verify is not None else self.default_verify,
                 **kwargs
             )
             return self._handle_response(response, method, endpoint)
         except Exception as e:
             self._handle_error(e, method, endpoint)
 
-    def get_sync(self, endpoint: str, **kwargs) -> Any:
-        return self.request_sync("GET", endpoint, **kwargs)
+    def get_sync(self, endpoint: str, verify: Optional[bool] = None, **kwargs) -> Any:
+        return self.request_sync("GET", endpoint, verify=verify, **kwargs)
 
-    def post_sync(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, **kwargs) -> Any:
-        return self.request_sync("POST", endpoint, json_data=json_data, **kwargs)
+    def post_sync(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, verify: Optional[bool] = None, **kwargs) -> Any:
+        return self.request_sync("POST", endpoint, json_data=json_data, verify=verify, **kwargs)
 
     # --- Common Helpers ---
 
