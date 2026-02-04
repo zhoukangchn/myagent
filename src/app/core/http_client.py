@@ -12,7 +12,8 @@ class HTTPClient:
         self, 
         base_url: str = "", 
         timeout: float = 30.0,
-        headers: Optional[Dict[str, str]] = None
+        headers: Optional[Dict[str, str]] = None,
+        verify: bool = True
     ):
         self.base_url = base_url
         self.timeout = httpx.Timeout(timeout, connect=5.0)
@@ -20,6 +21,8 @@ class HTTPClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        self.verify = verify
+        
         # Async members
         self._async_client: Optional[httpx.AsyncClient] = None
         self._async_lock = asyncio.Lock()
@@ -36,6 +39,7 @@ class HTTPClient:
                     base_url=self.base_url,
                     timeout=self.timeout,
                     headers=self.headers,
+                    verify=self.verify,
                     limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
                 )
             return self._async_client
@@ -51,7 +55,7 @@ class HTTPClient:
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
     ) -> Any:
@@ -61,7 +65,7 @@ class HTTPClient:
                 method=method,
                 url=endpoint,
                 params=params,
-                json=data,
+                json=json_data,
                 headers=headers,
                 **kwargs
             )
@@ -72,8 +76,8 @@ class HTTPClient:
     async def get(self, endpoint: str, **kwargs) -> Any:
         return await self.request_async("GET", endpoint, **kwargs)
 
-    async def post(self, endpoint: str, **kwargs) -> Any:
-        return await self.request_async("POST", endpoint, **kwargs)
+    async def post(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, **kwargs) -> Any:
+        return await self.request_async("POST", endpoint, json_data=json_data, **kwargs)
 
     # --- Synchronous Implementation ---
 
@@ -83,6 +87,7 @@ class HTTPClient:
                 base_url=self.base_url,
                 timeout=self.timeout,
                 headers=self.headers,
+                verify=self.verify,
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=50)
             )
         return self._sync_client
@@ -97,7 +102,7 @@ class HTTPClient:
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         **kwargs
     ) -> Any:
@@ -107,7 +112,7 @@ class HTTPClient:
                 method=method,
                 url=endpoint,
                 params=params,
-                json=data,
+                json=json_data,
                 headers=headers,
                 **kwargs
             )
@@ -118,8 +123,8 @@ class HTTPClient:
     def get_sync(self, endpoint: str, **kwargs) -> Any:
         return self.request_sync("GET", endpoint, **kwargs)
 
-    def post_sync(self, endpoint: str, **kwargs) -> Any:
-        return self.request_sync("POST", endpoint, **kwargs)
+    def post_sync(self, endpoint: str, json_data: Optional[Dict[str, Any]] = None, **kwargs) -> Any:
+        return self.request_sync("POST", endpoint, json_data=json_data, **kwargs)
 
     # --- Common Helpers ---
 
