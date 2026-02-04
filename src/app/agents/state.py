@@ -33,3 +33,7 @@ class WarroomState(AgentState):
     
     # RAG 增强
     similar_past_incidents: List[str]
+    
+    # 原始告警数据 (用于 Sentinel 解析)
+    raw_alert: Optional[dict]
+
