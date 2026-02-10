@@ -1,14 +1,14 @@
 [project]
-name = "rag-test"
+name = "agent-builder"
 version = "0.1.0"
-description = "Agentic RAG with LangGraph + DeepSeek + Self-Reflection"
+description = "Multi-Agent Building Framework with LangGraph Subgraphs and Sub-loop Support"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [
     { name = "Kang", email = "zhoukangchn@example.com" }
 ]
-keywords = ["rag", "agent", "langgraph", "fastapi", "deepseek"]
+keywords = ["agent", "langgraph", "multi-agent", "subgraph", "fastapi"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.scripts]
-rag-agent = "src.api.app:app"
+agent-builder = "src.api.app:app"
 
 [project.urls]
 Homepage = "https://github.com/zhoukangchn/rag-test"

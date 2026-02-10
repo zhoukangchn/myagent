@@ -1,8 +1,8 @@
-# RAG Agent
+# Agent Builder
 
-> Agentic RAG with LangGraph + DeepSeek + Self-Reflection
+> 多Agent构建框架 - 基于 LangGraph 的子图与子循环
 
-一个带有自我反思能力的 RAG Agent 脚手架项目。
+一个用于构建各种不同类型 Agent 的通用框架，支持子图嵌套和子图内循环模式。
 
 ## ✨ 特性
 

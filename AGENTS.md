@@ -1,6 +1,8 @@
-# AGENTS.md - RAG Agent 项目指南
+# AGENTS.md - Agent Builder 项目指南
 
-本文档为 AI 编码助手（Antigravity 等）提供项目规范和操作指引。
+本文档为 AI 编码助手提供项目规范和操作指引。
+
+Agent Builder 是一个用于构建各种不同类型 Agent 的通用框架，支持 LangGraph 子图嵌套和子图内循环模式。
 
 ## 目录
 
@@ -18,7 +20,7 @@
 
 修改以下内容后，**必须**运行验证流程：
 
-- `app/` 下的任何代码
+- `src/` 下的任何代码
 - `pyproject.toml` 或依赖配置
 - 测试文件
 
