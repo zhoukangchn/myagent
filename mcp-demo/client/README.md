@@ -5,14 +5,14 @@ MCP Client 示例，演示如何连接 MCP Server 并使用其功能。
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 使用 uv 安装依赖并创建虚拟环境
+uv sync
 
 # 连接 stdio 模式的 server
-python client.py --transport stdio
+uv run python client.py --transport stdio
 
 # 连接 SSE 模式的 server
-python client.py --transport sse --url http://localhost:3001/sse
+uv run python client.py --transport sse --url http://localhost:3001/sse
 ```
 
 ## 功能演示

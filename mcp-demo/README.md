@@ -8,13 +8,28 @@
 mcp-demo/
 ├── server/          # MCP Server 实现
 │   ├── server.py    # Server 主入口
-│   ├── requirements.txt
+│   ├── pyproject.toml
 │   └── README.md
 ├── client/          # MCP Client 实现
 │   ├── client.py    # Client 主入口
-│   ├── requirements.txt
+│   ├── pyproject.toml
 │   └── README.md
 └── README.md        # 本文件
+```
+
+## 环境要求
+
+- Python >= 3.10
+- [uv](https://docs.astral.sh/uv/) - Python 包管理器
+
+## 安装 uv
+
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 或使用 pip
+pip install uv
 ```
 
 ## 快速开始
@@ -24,25 +39,25 @@ mcp-demo/
 ```bash
 # Server
 cd server
-pip install -r requirements.txt
+uv sync
 
 # Client
 cd ../client
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. 运行 Server (stdio 模式)
 
 ```bash
 cd server
-python server.py --stdio
+uv run python server.py --stdio
 ```
 
 ### 3. 运行 Client (stdio 模式)
 
 ```bash
 cd client
-python client.py --transport stdio
+uv run python client.py --transport stdio
 ```
 
 ## 传输模式
@@ -53,10 +68,12 @@ python client.py --transport stdio
 
 ```bash
 # Server
-python server.py --stdio
+cd server
+uv run python server.py --stdio
 
 # Client (另一个终端)
-python client.py --transport stdio
+cd client
+uv run python client.py --transport stdio
 ```
 
 ### SSE 模式
@@ -65,10 +82,12 @@ python client.py --transport stdio
 
 ```bash
 # 启动 Server (端口 3001)
-python server.py --sse --port 3001
+cd server
+uv run python server.py --sse --port 3001
 
 # 另一个终端启动 Client
-python client.py --transport sse --url http://localhost:3001/sse
+cd client
+uv run python client.py --transport sse --url http://localhost:3001/sse
 ```
 
 ## 功能特性
@@ -97,7 +116,30 @@ python client.py --transport sse --url http://localhost:3001/sse
 | `code_review` | 代码审查模板 |
 | `explain_concept` | 概念解释模板 |
 
+## uv 常用命令
+
+```bash
+# 安装依赖
+uv sync
+
+# 添加新依赖
+uv add package_name
+
+# 添加开发依赖
+uv add --dev package_name
+
+# 更新依赖
+uv sync --upgrade
+
+# 运行脚本
+uv run python script.py
+
+# 激活虚拟环境
+source .venv/bin/activate
+```
+
 ## 相关链接
 
+- [uv 文档](https://docs.astral.sh/uv/)
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [MCP 官方文档](https://modelcontextprotocol.io/)

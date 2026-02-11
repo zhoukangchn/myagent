@@ -12,14 +12,14 @@
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 使用 uv 安装依赖并创建虚拟环境
+uv sync
 
 # 运行 stdio 模式
-python server.py --stdio
+uv run python server.py --stdio
 
 # 运行 SSE 模式
-python server.py --sse --port 3001
+uv run python server.py --sse --port 3001
 ```
 
 ## 工具列表
