@@ -27,7 +27,7 @@ function renderExample(serverId) {
   const block = document.getElementById("exampleBlock");
   block.textContent = JSON.stringify(
     {
-      endpoint: "/mcp",
+      endpoint: "/mcp/",
       headers: { "x-mcp-server-id": serverId || "<server_id>" },
       body: {
         jsonrpc: "2.0",

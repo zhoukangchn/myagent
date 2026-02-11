@@ -36,7 +36,7 @@ uv run uvicorn demo.weather_server:app --host 127.0.0.1 --port 9001 --reload
 
 ## Data Plane MCP
 
-`POST /mcp`
+`POST /mcp/`
 
 Required header:
 - `x-mcp-server-id: <server_id>`
@@ -70,7 +70,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/servers \
 2. Initialize MCP on Hub (replace `<server_id>`):
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp \
+curl -sS -X POST http://127.0.0.1:8000/mcp/ \
   -H 'content-type: application/json' \
   -H 'x-mcp-server-id: <server_id>' \
   -d '{
@@ -87,7 +87,7 @@ curl -sS -X POST http://127.0.0.1:8000/mcp \
 3. List tools:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp \
+curl -sS -X POST http://127.0.0.1:8000/mcp/ \
   -H 'content-type: application/json' \
   -H 'x-mcp-server-id: <server_id>' \
   -d '{
@@ -101,7 +101,7 @@ curl -sS -X POST http://127.0.0.1:8000/mcp \
 4. Call weather tool:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp \
+curl -sS -X POST http://127.0.0.1:8000/mcp/ \
   -H 'content-type: application/json' \
   -H 'x-mcp-server-id: <server_id>' \
   -d '{

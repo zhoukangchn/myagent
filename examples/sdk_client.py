@@ -8,7 +8,7 @@ from mcp.client.streamable_http import streamablehttp_client
 
 
 async def run(hub_base_url: str, server_id: str, city: str) -> None:
-    endpoint = f"{hub_base_url.rstrip('/')}/mcp"
+    endpoint = f"{hub_base_url.rstrip('/')}/mcp/"
 
     async with streamablehttp_client(endpoint, headers={"x-mcp-server-id": server_id}) as (
         read_stream,
@@ -21,8 +21,6 @@ async def run(hub_base_url: str, server_id: str, city: str) -> None:
             tools = await session.list_tools()
             print("Tools:", tools)
 
-            # Aggregated tool naming rule: server_name.tool_name
-            # For demo weather server this is commonly: weather-downstream.get_weather
             tool_name = "get_weather"
             for t in getattr(tools, "tools", []):
                 if t.name.endswith(".get_weather"):

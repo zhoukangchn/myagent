@@ -73,4 +73,5 @@ def test_mcp_missing_header_returns_400():
         "/mcp",
         json=_rpc("initialize", {"clientInfo": {"name": "x"}, "capabilities": {}}),
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["error"]["code"] == -32602

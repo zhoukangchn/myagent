@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import AsyncExitStack
 from collections.abc import Awaitable, Callable
 
 from starlette.responses import JSONResponse
@@ -20,31 +21,37 @@ class FastMcpHubGateway:
     def __init__(self, app_state) -> None:
         self._app_state = app_state
         self._apps_by_server: dict[str, Callable[[dict, Callable, Callable], Awaitable[None]]] = {}
+        self._lifespans_by_server: dict[str, AsyncExitStack] = {}
         self._lock = asyncio.Lock()
 
     async def __call__(self, scope, receive, send) -> None:
         if scope.get("type") != "http":
-            await JSONResponse({"detail": "unsupported scope"}, status_code=500)(scope, receive, send)
+            await self._rpc_error(scope, receive, send, -32603, "unsupported scope")
             return
 
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
         server_id = headers.get("x-mcp-server-id", "").strip()
         if not server_id:
-            await JSONResponse(
-                {"jsonrpc": "2.0", "id": None, "error": {"code": -32602, "message": "x-mcp-server-id required"}},
-                status_code=400,
-            )(scope, receive, send)
+            await self._rpc_error(scope, receive, send, -32602, "x-mcp-server-id required")
             return
 
-        app = await self._ensure_server_app(server_id)
+        try:
+            app = await self._ensure_server_app(server_id)
+        except Exception as exc:
+            await self._rpc_error(scope, receive, send, -32050, f"failed to prepare target server: {exc}")
+            return
+
         if app is None:
-            await JSONResponse(
-                {"jsonrpc": "2.0", "id": None, "error": {"code": -32004, "message": "target server not found"}},
-                status_code=404,
-            )(scope, receive, send)
+            await self._rpc_error(scope, receive, send, -32004, "target server not found")
             return
 
-        await app(scope, receive, send)
+        # `FastMCP.streamable_http_app()` serves its transport endpoint at `/mcp`.
+        # This gateway is mounted under `/mcp`, so we normalize sub-app path here.
+        forwarded_scope = dict(scope)
+        forwarded_scope["path"] = "/mcp"
+        forwarded_scope["raw_path"] = b"/mcp"
+        forwarded_scope["root_path"] = ""
+        await app(forwarded_scope, receive, send)
 
     async def _ensure_server_app(self, server_id: str):
         existing = self._apps_by_server.get(server_id)
@@ -62,8 +69,15 @@ class FastMcpHubGateway:
 
             await self._app_state.tool_catalog.refresh_server(server_id)
             app = self._build_fastmcp_server_app(server_id)
+            await self._startup_subapp(server_id, app)
             self._apps_by_server[server_id] = app
             return app
+
+    async def _rpc_error(self, scope, receive, send, code: int, message: str) -> None:
+        await JSONResponse(
+            {"jsonrpc": "2.0", "id": None, "error": {"code": code, "message": message}},
+            status_code=200,
+        )(scope, receive, send)
 
     def refresh_server_sync(self, server_id: str) -> None:
         """Utility for sync test code paths.
@@ -79,17 +93,37 @@ class FastMcpHubGateway:
     async def refresh_server(self, server_id: str) -> None:
         server = self._app_state.registry.get(server_id)
         if server is None:
-            self._apps_by_server.pop(server_id, None)
+            old = self._apps_by_server.pop(server_id, None)
+            if old is not None:
+                await self._shutdown_subapp(server_id)
             self._app_state.tool_catalog.delete_server(server_id)
             self._app_state.session_store.delete(server_id)
             return
 
         await self._app_state.tool_catalog.refresh_server(server_id)
-        self._apps_by_server[server_id] = self._build_fastmcp_server_app(server_id)
+        old = self._apps_by_server.get(server_id)
+        if old is not None:
+            await self._shutdown_subapp(server_id)
+        new_app = self._build_fastmcp_server_app(server_id)
+        await self._startup_subapp(server_id, new_app)
+        self._apps_by_server[server_id] = new_app
 
     async def refresh_all(self) -> None:
         for server in self._app_state.registry.list():
             await self.refresh_server(server.id)
+
+    async def _startup_subapp(self, server_id: str, app) -> None:
+        stack = AsyncExitStack()
+        router = getattr(app, "router", None)
+        lifespan_context = getattr(router, "lifespan_context", None)
+        if lifespan_context is not None:
+            await stack.enter_async_context(lifespan_context(app))
+        self._lifespans_by_server[server_id] = stack
+
+    async def _shutdown_subapp(self, server_id: str) -> None:
+        stack = self._lifespans_by_server.pop(server_id, None)
+        if stack is not None:
+            await stack.aclose()
 
     def _build_fastmcp_server_app(self, server_id: str):
         # Local import so the module can still be imported in environments
@@ -101,16 +135,41 @@ class FastMcpHubGateway:
         entries = self._app_state.tool_catalog.list_by_server(server_id)
 
         for entry in entries:
-            mcp.tool(name=entry.public_name, description=entry.description)(self._tool_factory(entry.public_name))
+            mcp.tool(name=entry.public_name, description=entry.description)(self._tool_factory(entry))
 
         return mcp.streamable_http_app()
 
-    def _tool_factory(self, public_tool_name: str):
-        async def _tool_proxy(**kwargs):
-            return await self._call_public_tool(public_tool_name, kwargs)
+    def _tool_factory(self, entry):
+        input_schema = entry.input_schema if isinstance(entry.input_schema, dict) else {}
+        properties = input_schema.get("properties", {})
+        required = set(input_schema.get("required", []))
+        arg_names = [name for name in properties.keys() if isinstance(name, str) and name.isidentifier()]
 
-        _tool_proxy.__name__ = f"tool_{public_tool_name.replace('.', '_')}"
-        return _tool_proxy
+        # Build a concrete function signature from schema keys so FastMCP
+        # exposes natural tool args (e.g. city) instead of a synthetic kwargs field.
+        if arg_names:
+            params = []
+            for name in arg_names:
+                if name in required:
+                    params.append(name)
+                else:
+                    params.append(f"{name}=None")
+            args_expr = ", ".join([f"'{name}': {name}" for name in arg_names])
+            src = (
+                f"async def _tool_proxy({', '.join(params)}):\n"
+                f"    arguments = {{{args_expr}}}\n"
+                "    arguments = {k: v for k, v in arguments.items() if v is not None}\n"
+                f"    return await gateway._call_public_tool('{entry.public_name}', arguments)\n"
+            )
+            namespace = {"gateway": self}
+            exec(src, namespace)
+            func = namespace["_tool_proxy"]
+        else:
+            async def func(arguments: dict | None = None):
+                return await self._call_public_tool(entry.public_name, arguments or {})
+
+        func.__name__ = f"tool_{entry.public_name.replace('.', '_')}"
+        return func
 
     async def _call_public_tool(self, public_tool_name: str, arguments: dict):
         entry = self._app_state.tool_catalog.get(public_tool_name)

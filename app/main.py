@@ -44,7 +44,12 @@ async def lifespan(_: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title="Python MCP Hub Demo", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Python MCP Hub Demo",
+    version="0.1.0",
+    lifespan=lifespan,
+    redirect_slashes=False,
+)
 
 app.include_router(build_servers_router(app_state))
 app.mount("/mcp", app_state.fastmcp_hub)
