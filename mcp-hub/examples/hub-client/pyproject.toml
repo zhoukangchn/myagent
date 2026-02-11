@@ -1,0 +1,17 @@
+[project]
+name = "mcp-hub-client"
+version = "1.0.0"
+description = "示例 MCP Hub Client - 服务发现"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "httpx>=0.25.0",
+    "rich>=13.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
