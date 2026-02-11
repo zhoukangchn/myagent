@@ -31,6 +31,7 @@ uv run uvicorn demo.weather_server:app --host 127.0.0.1 --port 9001 --reload
 - `POST /api/servers`
 - `GET /api/servers`
 - `GET /api/servers/{server_id}`
+- `GET /api/servers/{server_id}/mcp-config`
 - `DELETE /api/servers/{server_id}`
 - `GET /api/health`
 
@@ -49,6 +50,7 @@ Supported methods:
 Tool naming:
 - Hub exposes aggregated tools as `server_name.tool_name`.
 - Example: `weather-downstream.get_weather`.
+- Weather demo tools include `get_weather` and `get_weather_forecast`.
 
 ## Demo Flow (curl)
 
@@ -115,6 +117,23 @@ curl -sS -X POST http://127.0.0.1:8000/mcp/ \
   }'
 ```
 
+5. Call weather forecast tool:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/mcp/ \
+  -H 'content-type: application/json' \
+  -H 'x-mcp-server-id: <server_id>' \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":4,
+    "method":"tools/call",
+    "params":{
+      "name":"weather-downstream.get_weather_forecast",
+      "arguments":{"city":"Beijing","days":3}
+    }
+  }'
+```
+
 ## Official Python MCP SDK Example
 
 See `examples/sdk_client.py`:
@@ -122,6 +141,46 @@ See `examples/sdk_client.py`:
 ```bash
 uv run python examples/sdk_client.py --server-id <server_id> --city Beijing
 ```
+
+## Export Standard `mcpServers` Config
+
+Export a client-friendly MCP config for a registered `server_id`:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/servers/<server_id>/mcp-config -o mcp-config.json
+```
+
+Example response:
+
+```json
+{
+  "mcpServers": {
+    "weather-downstream": {
+      "url": "http://127.0.0.1:8000/mcp/",
+      "headers": {
+        "x-mcp-server-id": "<server_id>"
+      }
+    }
+  }
+}
+```
+
+Notes:
+- This format is intended for MCP clients that accept `mcpServers` JSON.
+- Hub only returns routing header `x-mcp-server-id` here; downstream private headers are not exposed.
+
+## Python Demo Using Exported `mcpServers`
+
+See `examples/mcpservers_client.py`:
+
+```bash
+uv run python examples/mcpservers_client.py --config-file mcp-config.json --city Beijing
+```
+
+This demo will:
+- print all discovered tools from the selected MCP server,
+- auto-select one tool (`*.get_weather` first, then `*.get_weather_forecast`, otherwise the first tool),
+- and try one `tools/call` with inferred arguments.
 
 Official code style used in this repo (no compatibility fallback):
 

@@ -28,6 +28,15 @@ class ServerRecord(BaseModel):
     updated_at: str
 
 
+class McpServerConfigItem(BaseModel):
+    url: str
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class McpServersConfigResponse(BaseModel):
+    mcpServers: dict[str, McpServerConfigItem] = Field(default_factory=dict)
+
+
 class RpcRequest(BaseModel):
     jsonrpc: str
     id: Any = None

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import AsyncExitStack
-from collections.abc import Awaitable, Callable
 
 from starlette.responses import JSONResponse
 
@@ -20,8 +19,6 @@ class FastMcpHubGateway:
 
     def __init__(self, app_state) -> None:
         self._app_state = app_state
-        self._apps_by_server: dict[str, Callable[[dict, Callable, Callable], Awaitable[None]]] = {}
-        self._lifespans_by_server: dict[str, AsyncExitStack] = {}
         self._lock = asyncio.Lock()
 
     async def __call__(self, scope, receive, send) -> None:
@@ -36,13 +33,9 @@ class FastMcpHubGateway:
             return
 
         try:
-            app = await self._ensure_server_app(server_id)
+            app = await self._build_request_subapp(server_id)
         except Exception as exc:
             await self._rpc_error(scope, receive, send, -32050, f"failed to prepare target server: {exc}")
-            return
-
-        if app is None:
-            await self._rpc_error(scope, receive, send, -32004, "target server not found")
             return
 
         # `FastMCP.streamable_http_app()` serves its transport endpoint at `/mcp`.
@@ -51,27 +44,16 @@ class FastMcpHubGateway:
         forwarded_scope["path"] = "/mcp"
         forwarded_scope["raw_path"] = b"/mcp"
         forwarded_scope["root_path"] = ""
-        await app(forwarded_scope, receive, send)
+        await self._run_subapp_in_request_lifespan(app, forwarded_scope, receive, send)
 
-    async def _ensure_server_app(self, server_id: str):
-        existing = self._apps_by_server.get(server_id)
-        if existing is not None:
-            return existing
+    async def _build_request_subapp(self, server_id: str):
+        server = self._app_state.registry.get(server_id)
+        if server is None:
+            raise HubError("target server not found", code=-32004)
 
         async with self._lock:
-            existing = self._apps_by_server.get(server_id)
-            if existing is not None:
-                return existing
-
-            server = self._app_state.registry.get(server_id)
-            if server is None:
-                return None
-
             await self._app_state.tool_catalog.refresh_server(server_id)
-            app = self._build_fastmcp_server_app(server_id)
-            await self._startup_subapp(server_id, app)
-            self._apps_by_server[server_id] = app
-            return app
+            return self._build_fastmcp_server_app(server_id)
 
     async def _rpc_error(self, scope, receive, send, code: int, message: str) -> None:
         await JSONResponse(
@@ -84,45 +66,42 @@ class FastMcpHubGateway:
 
         Uses a dedicated loop when no running loop is available.
         """
+        async def _refresh_catalog_only() -> None:
+            server = self._app_state.registry.get(server_id)
+            if server is None:
+                self._app_state.tool_catalog.delete_server(server_id)
+                self._app_state.session_store.delete(server_id)
+                return
+            await self._app_state.tool_catalog.refresh_server(server_id)
+
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self.refresh_server(server_id))
+            loop.create_task(_refresh_catalog_only())
         except RuntimeError:
-            asyncio.run(self.refresh_server(server_id))
+            asyncio.run(_refresh_catalog_only())
 
     async def refresh_server(self, server_id: str) -> None:
         server = self._app_state.registry.get(server_id)
         if server is None:
-            old = self._apps_by_server.pop(server_id, None)
-            if old is not None:
-                await self._shutdown_subapp(server_id)
             self._app_state.tool_catalog.delete_server(server_id)
             self._app_state.session_store.delete(server_id)
             return
 
         await self._app_state.tool_catalog.refresh_server(server_id)
-        old = self._apps_by_server.get(server_id)
-        if old is not None:
-            await self._shutdown_subapp(server_id)
-        new_app = self._build_fastmcp_server_app(server_id)
-        await self._startup_subapp(server_id, new_app)
-        self._apps_by_server[server_id] = new_app
 
     async def refresh_all(self) -> None:
         for server in self._app_state.registry.list():
             await self.refresh_server(server.id)
 
-    async def _startup_subapp(self, server_id: str, app) -> None:
+    async def _run_subapp_in_request_lifespan(self, app, scope, receive, send) -> None:
         stack = AsyncExitStack()
         router = getattr(app, "router", None)
         lifespan_context = getattr(router, "lifespan_context", None)
         if lifespan_context is not None:
             await stack.enter_async_context(lifespan_context(app))
-        self._lifespans_by_server[server_id] = stack
-
-    async def _shutdown_subapp(self, server_id: str) -> None:
-        stack = self._lifespans_by_server.pop(server_id, None)
-        if stack is not None:
+        try:
+            await app(scope, receive, send)
+        finally:
             await stack.aclose()
 
     def _build_fastmcp_server_app(self, server_id: str):
@@ -131,7 +110,7 @@ class FastMcpHubGateway:
         from mcp.server.fastmcp import FastMCP
 
         server = self._app_state.registry.get(server_id)
-        mcp = FastMCP(name=f"hub-{server.name if server else server_id}")
+        mcp = FastMCP(name=f"hub-{server.name if server else server_id}", stateless_http=True)
         entries = self._app_state.tool_catalog.list_by_server(server_id)
 
         for entry in entries:
