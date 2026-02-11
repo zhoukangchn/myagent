@@ -3,10 +3,10 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -24,107 +24,95 @@ class ServiceRegistration(BaseModel):
     name: str
     version: str = "1.0.0"
     description: Optional[str] = None
-    endpoint: str  # SSE endpoint URL
+    url: str
     tools: List[ToolInfo] = Field(default_factory=list)
     
 class ServiceInfo(BaseModel):
     name: str
     version: str
     description: Optional[str] = None
-    endpoint: str
+    url: str
     tools: List[ToolInfo]
-    status: str = "online"  # online/offline
+    status: str = "online"
     registered_at: datetime
     last_heartbeat: datetime
 
 # ==================== 内存存储 ====================
 
-class ServiceRegistry:
-    def __init__(self, heartbeat_timeout: int = 60):
-        self._services: Dict[str, ServiceInfo] = {}
-        self._heartbeat_timeout = heartbeat_timeout
-        
-    def register(self, registration: ServiceRegistration) -> ServiceInfo:
-        """注册服务"""
-        now = datetime.utcnow()
-        service = ServiceInfo(
-            name=registration.name,
-            version=registration.version,
-            description=registration.description,
-            endpoint=registration.endpoint,
-            tools=registration.tools,
-            status="online",
-            registered_at=now,
-            last_heartbeat=now
-        )
-        self._services[registration.name] = service
-        logger.info(f"✅ Service registered: {registration.name}")
-        return service
-    
-    def unregister(self, name: str) -> bool:
-        """注销服务"""
-        if name in self._services:
-            del self._services[name]
-            logger.info(f"❌ Service unregistered: {name}")
-            return True
-        return False
-    
-    def get_service(self, name: str) -> Optional[ServiceInfo]:
-        """获取服务"""
-        return self._services.get(name)
-    
-    def list_services(self) -> List[ServiceInfo]:
-        """列出所有在线服务"""
-        now = datetime.utcnow()
-        online_services = []
-        for service in self._services.values():
-            # 检查心跳超时
-            if (now - service.last_heartbeat).seconds < self._heartbeat_timeout:
-                service.status = "online"
-                online_services.append(service)
-            else:
-                service.status = "offline"
-        return online_services
-    
-    def update_heartbeat(self, name: str) -> bool:
-        """更新心跳"""
-        if name in self._services:
-            self._services[name].last_heartbeat = datetime.utcnow()
-            self._services[name].status = "online"
-            return True
-        return False
-    
-    def cleanup_offline(self):
-        """清理离线服务"""
-        now = datetime.utcnow()
-        offline = [
-            name for name, svc in self._services.items()
-            if (now - svc.last_heartbeat).seconds >= self._heartbeat_timeout
-        ]
-        for name in offline:
-            self._services[name].status = "offline"
+SERVICE_TIMEOUT_SECONDS = 60
+
+services: Dict[str, ServiceInfo] = {}
+
+def register_service(registration: ServiceRegistration) -> ServiceInfo:
+    """注册服务"""
+    now = datetime.utcnow()
+    service = ServiceInfo(
+        name=registration.name,
+        version=registration.version,
+        description=registration.description,
+        url=registration.url,
+        tools=registration.tools,
+        status="online",
+        registered_at=now,
+        last_heartbeat=now
+    )
+    services[registration.name] = service
+    logger.info(f"✅ Service registered: {registration.name}")
+    return service
+
+def unregister_service(name: str) -> bool:
+    """注销服务"""
+    if name in services:
+        del services[name]
+        logger.info(f"❌ Service unregistered: {name}")
+        return True
+    return False
+
+def get_service(name: str) -> Optional[ServiceInfo]:
+    """获取服务"""
+    return services.get(name)
+
+def list_services() -> List[ServiceInfo]:
+    """列出所有服务"""
+    now = datetime.utcnow()
+    online_services = []
+    for service in services.values():
+        elapsed = (now - service.last_heartbeat).total_seconds()
+        if elapsed < SERVICE_TIMEOUT_SECONDS:
+            service.status = "online"
+            online_services.append(service)
+        else:
+            service.status = "offline"
+    return online_services
+
+def update_heartbeat(name: str) -> bool:
+    """更新心跳"""
+    if name in services:
+        services[name].last_heartbeat = datetime.utcnow()
+        services[name].status = "online"
+        return True
+    return False
+
+def cleanup_offline():
+    """清理离线服务"""
+    now = datetime.utcnow()
+    for name, svc in services.items():
+        elapsed = (now - svc.last_heartbeat).total_seconds()
+        if elapsed >= SERVICE_TIMEOUT_SECONDS:
+            services[name].status = "offline"
             logger.info(f"💤 Service marked offline: {name}")
 
 # ==================== FastAPI 应用 ====================
 
-# 全局注册表
-registry = ServiceRegistry()
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """生命周期管理"""
-    # 启动时
     logger.info("🚀 MCP Hub starting...")
-    
-    # 启动清理任务
     async def cleanup_task():
         while True:
             await asyncio.sleep(30)
-            registry.cleanup_offline()
-    
+            cleanup_offline()
     task = asyncio.create_task(cleanup_task())
     yield
-    # 关闭时
     task.cancel()
     logger.info("🛑 MCP Hub stopped")
 
@@ -136,43 +124,38 @@ app = FastAPI(
 )
 
 @app.post("/register", response_model=ServiceInfo)
-async def register_service(registration: ServiceRegistration):
-    """注册服务"""
-    return registry.register(registration)
+async def register(registration: ServiceRegistration):
+    return register_service(registration)
 
 @app.delete("/services/{name}")
-async def unregister_service(name: str):
-    """注销服务"""
-    success = registry.unregister(name)
-    if not success:
+async def unregister(name: str):
+    if not unregister_service(name):
         raise HTTPException(status_code=404, detail=f"Service '{name}' not found")
     return {"message": f"Service '{name}' unregistered"}
 
 @app.get("/services", response_model=List[ServiceInfo])
-async def list_services():
-    """列出所有在线服务"""
-    return registry.list_services()
+async def list():
+    return list_services()
 
 @app.get("/services/{name}", response_model=ServiceInfo)
-async def get_service(name: str):
-    """获取服务详情"""
-    service = registry.get_service(name)
+async def get(name: str):
+    service = get_service(name)
     if not service:
         raise HTTPException(status_code=404, detail=f"Service '{name}' not found")
+    elapsed = (datetime.utcnow() - service.last_heartbeat).total_seconds()
+    if elapsed >= SERVICE_TIMEOUT_SECONDS:
+        service.status = "offline"
     return service
 
 @app.post("/services/{name}/heartbeat")
 async def heartbeat(name: str):
-    """服务心跳"""
-    success = registry.update_heartbeat(name)
-    if not success:
+    if not update_heartbeat(name):
         raise HTTPException(status_code=404, detail=f"Service '{name}' not found")
-    return {"message": "Heartbeat received"}
+    return {"status": "online", "message": "Heartbeat received"}
 
 @app.get("/health")
 async def health():
-    """健康检查"""
-    return {"status": "healthy", "services": len(registry._services)}
+    return {"status": "healthy", "services": len(services)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

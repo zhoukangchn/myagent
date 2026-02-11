@@ -17,6 +17,23 @@ import uvicorn
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-server")
 
+# ==================== 工具函数 (供测试使用) ====================
+
+def calculate(operation: str, a: float, b: float) -> float:
+    """同步计算函数 (测试用)"""
+    if operation == "add":
+        return a + b
+    elif operation == "subtract":
+        return a - b
+    elif operation == "multiply":
+        return a * b
+    elif operation == "divide":
+        if b == 0:
+            raise ValueError("Division by zero")
+        return a / b
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
 # ==================== MCP 服务实现 ====================
 
 app = Server("demo-server")
