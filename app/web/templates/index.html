@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP Hub Demo</title>
+  <style>
+    :root {
+      --bg: #f2f6fb;
+      --card: #ffffff;
+      --ink: #1b2430;
+      --accent: #006c9a;
+      --border: #d4dfeb;
+      --warn: #a53b3b;
+      --ok: #2f7e45;
+    }
+    body { font-family: "IBM Plex Sans", "Segoe UI", sans-serif; margin: 0; background: linear-gradient(135deg, #f2f6fb, #e9f2f8); color: var(--ink); }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    label { display: block; margin-top: 8px; font-size: 13px; }
+    input, textarea { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+    button { margin-top: 10px; border: 0; border-radius: 8px; padding: 8px 12px; background: var(--accent); color: white; cursor: pointer; }
+    ul { padding-left: 18px; }
+    .status { font-size: 13px; margin-top: 8px; }
+    .ok { color: var(--ok); }
+    .err { color: var(--warn); }
+    pre { background: #101820; color: #d9eef9; padding: 10px; border-radius: 8px; overflow: auto; }
+    @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>MCP Hub Demo</h1>
+    <p>Control plane: REST. Data plane: FastMCP on <code>/mcp</code> with header <code>x-mcp-server-id</code>.</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Register Server</h2>
+        <label>Name <input id="name" value="weather-downstream" /></label>
+        <label>Base URL <input id="base_url" value="http://localhost:9001" /></label>
+        <label>MCP Endpoint <input id="mcp_endpoint" value="/mcp" /></label>
+        <label>Description <input id="description" value="Demo weather server" /></label>
+        <button id="createBtn">Create</button>
+        <div id="createStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h2>Servers</h2>
+        <button id="refreshBtn">Refresh</button>
+        <ul id="serverList"></ul>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top: 16px;">
+      <h2>MCP Call Example</h2>
+      <p>Use endpoint <code>/mcp</code> and include <code>x-mcp-server-id</code> header.</p>
+      <pre id="exampleBlock"></pre>
+    </section>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
