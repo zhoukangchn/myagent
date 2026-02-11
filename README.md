@@ -123,8 +123,27 @@ See `examples/sdk_client.py`:
 uv run python examples/sdk_client.py --server-id <server_id> --city Beijing
 ```
 
+Official code style used in this repo (no compatibility fallback):
+
+```python
+import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+endpoint = "http://127.0.0.1:8000/mcp/"
+server_id = "<server_id>"
+
+async with httpx.AsyncClient(headers={"x-mcp-server-id": server_id}) as client:
+    async with streamable_http_client(endpoint, http_client=client) as (read_stream, write_stream, _):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            result = await session.call_tool("weather-downstream.get_weather", {"city": "Beijing"})
+```
+
 ## Notes
 
 - Demo intentionally has no auth and no persistence.
-- Downstream transport is Streamable HTTP style JSON-RPC over HTTP.
+- Downstream weather server is implemented with official FastMCP (streamable HTTP transport).
 - Tool metadata cache refreshes on server registration and periodically in background.
+- Raw weather tool output is native text (not custom content/isError wrapping in downstream).

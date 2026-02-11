@@ -3,32 +3,34 @@ from __future__ import annotations
 import argparse
 import asyncio
 
+import httpx
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 
 async def run(hub_base_url: str, server_id: str, city: str) -> None:
     endpoint = f"{hub_base_url.rstrip('/')}/mcp/"
 
-    async with streamablehttp_client(endpoint, headers={"x-mcp-server-id": server_id}) as (
-        read_stream,
-        write_stream,
-        _,
-    ):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
+    async with httpx.AsyncClient(headers={"x-mcp-server-id": server_id}) as client:
+        async with streamable_http_client(endpoint, http_client=client) as (
+            read_stream,
+            write_stream,
+            _,
+        ):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
 
-            tools = await session.list_tools()
-            print("Tools:", tools)
+                tools = await session.list_tools()
+                print("Tools:", tools)
 
-            tool_name = "get_weather"
-            for t in getattr(tools, "tools", []):
-                if t.name.endswith(".get_weather"):
-                    tool_name = t.name
-                    break
+                tool_name = "get_weather"
+                for t in getattr(tools, "tools", []):
+                    if t.name.endswith(".get_weather"):
+                        tool_name = t.name
+                        break
 
-            result = await session.call_tool(tool_name, {"city": city})
-            print("Weather result:", result)
+                result = await session.call_tool(tool_name, {"city": city})
+                print("Weather result:", result)
 
 
 def main() -> None:

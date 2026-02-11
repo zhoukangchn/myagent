@@ -44,6 +44,11 @@ class ToolCatalogStore:
             sid = await self._downstream_client.initialize(server)
             self._session_store.set(server_id, sid)
             listed = await self._downstream_client.list_tools(server, sid)
+        except Exception:
+            # Keep server registered even when downstream is temporarily unavailable.
+            # Existing tool mappings for this server are removed to avoid stale exposure.
+            self.delete_server(server_id)
+            return 0
 
         tools = listed.get("tools", [])
         entries: list[ToolCatalogEntry] = []

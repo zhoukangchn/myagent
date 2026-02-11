@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -14,7 +15,15 @@ class DownstreamMcpClient:
         self._transport = transport
 
     async def initialize(self, server: ServerRecord) -> str:
-        response, headers = await self._rpc(server, "initialize", {"capabilities": {}, "clientInfo": {"name": "hub"}})
+        response, headers = await self._rpc(
+            server,
+            "initialize",
+            {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "hub", "version": "0.1.0"},
+            },
+        )
         session_id = headers.get("mcp-session-id") or headers.get("Mcp-Session-Id")
         if not session_id:
             raise McpProtocolError("downstream initialize did not return mcp-session-id")
@@ -52,7 +61,11 @@ class DownstreamMcpClient:
         params: dict[str, Any],
         downstream_session_id: str | None = None,
     ) -> tuple[dict[str, Any], httpx.Headers]:
-        headers = {"content-type": "application/json", **server.headers}
+        headers = {
+            "content-type": "application/json",
+            "accept": "application/json, text/event-stream",
+            **server.headers,
+        }
         if downstream_session_id:
             headers["mcp-session-id"] = downstream_session_id
 
@@ -73,8 +86,31 @@ class DownstreamMcpClient:
         if resp.status_code >= 400:
             raise McpTransportError(f"downstream returned HTTP {resp.status_code}")
 
-        body = resp.json()
+        body = self._parse_response_body(resp)
         if body.get("jsonrpc") != "2.0":
             raise McpProtocolError("invalid jsonrpc response")
 
         return body, resp.headers
+
+    def _parse_response_body(self, resp: httpx.Response) -> dict[str, Any]:
+        content_type = (resp.headers.get("content-type") or "").lower()
+
+        if "text/event-stream" in content_type:
+            # FastMCP may return a single SSE event containing one JSON-RPC message.
+            raw = resp.text
+            data_lines: list[str] = []
+            for line in raw.splitlines():
+                if line.startswith("data:"):
+                    data_lines.append(line[len("data:") :].strip())
+            if not data_lines:
+                raise McpProtocolError("empty SSE response from downstream")
+            payload = "\n".join(data_lines)
+            try:
+                return json.loads(payload)
+            except json.JSONDecodeError as exc:
+                raise McpProtocolError(f"failed to decode downstream SSE payload: {exc}") from exc
+
+        try:
+            return resp.json()
+        except json.JSONDecodeError as exc:
+            raise McpProtocolError(f"failed to decode downstream JSON payload: {exc}") from exc
