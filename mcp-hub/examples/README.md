@@ -1,13 +1,17 @@
 # Examples
 
-示例代码展示如何使用 MCP Hub。
+MCP Hub 示例代码，包含 Server 和 Client 的完整实现。
 
 ## 目录结构
 
 ```
 examples/
-├── weather-server/    # 示例 MCP Server (注册到 Hub)
-└── hub-client/        # 示例 Client (从 Hub 发现服务)
+├── weather-server/      # 天气服务示例
+├── file-server/         # ⭐ 文件操作服务
+├── calc-server/         # ⭐ 数学计算服务
+├── time-server/         # ⭐ 时间服务
+├── hub-client/          # 基础 Client 示例
+└── advanced-client/     # ⭐ 高级 Client 示例
 ```
 
 ## 快速开始
@@ -16,28 +20,86 @@ examples/
 
 ```bash
 cd ..
+uv sync
 uv run python -m mcp_hub.main --port 8000
 ```
 
-### 2. 启动 Weather Server
+### 2. 启动所有服务 (多个终端)
 
 ```bash
+# 终端 1: 天气服务
 cd weather-server
 uv sync
-uv run python server.py --port 3001 --hub http://localhost:8000
+uv run python server.py --port 3001
+
+# 终端 2: 文件服务
+cd file-server
+uv sync
+uv run python server.py --port 3002
+
+# 终端 3: 计算服务
+cd calc-server
+uv sync
+uv run python server.py --port 3003
+
+# 终端 4: 时间服务
+cd time-server
+uv sync
+uv run python server.py --port 3004
 ```
 
-### 3. 运行 Hub Client
+### 3. 运行 Client 示例
 
 ```bash
+# 基础 Client
 cd hub-client
 uv sync
-uv run python client.py --hub http://localhost:8000
+uv run python client.py
+
+# 高级 Client
+cd advanced-client
+uv sync
+uv run python client.py
 ```
 
-## 预期输出
+## 服务清单
 
-Hub Client 会显示：
-- 已注册的服务列表
-- Weather Server 的详细信息
-- 调用 get_weather 工具的结果
+| 服务名 | 端口 | 功能 |
+|--------|------|------|
+| weather-server | 3001 | 天气查询 |
+| file-server | 3002 | 文件读写、搜索 |
+| calc-server | 3003 | 数学计算、单位转换 |
+| time-server | 3004 | 时区转换、时间戳 |
+
+## 使用 SDK
+
+### Server SDK
+
+```python
+from mcp_hub.sdk import HubServer
+
+app = HubServer(
+    name="my-server",
+    hub_url="http://localhost:8000",
+)
+
+@app.register_tool
+async def my_tool(args):
+    return "result"
+
+app.run_sync(port=3000)
+```
+
+### Client SDK
+
+```python
+from mcp_hub.sdk import HubClient
+
+client = HubClient("http://localhost:8000")
+
+# 发现服务
+services = await client.discover(tools=["calculate"])
+
+# 调用工具
+result = await client.call("calculate", {"a": 1, "b": 2})
+```

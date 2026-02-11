@@ -1,0 +1,15 @@
+[project]
+name = "mcp-calc-server"
+version = "1.0.0"
+description = "MCP Calc Server - 数学计算服务"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp-hub",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+mcp-hub = { path = "../.." }
