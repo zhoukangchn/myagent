@@ -2,48 +2,47 @@
 
 ## 整体架构
 
-```mermaid
-graph TB
-    subgraph 用户端
-        Client[ MCP 客户端]
-    end
+> 为避免 GitHub Mermaid 渲染兼容问题，本节改为文本架构描述。
 
-    subgraph Hub 网关
-        Gateway[ FastMcpHubGateway<br/>/mcp 端点]
-        Header[ x-mcp-server-id<br/]Header 验证]
-        ToolFactory[ 动态工具<br/>代理工厂]
-    end
+### 分层结构
 
-    subgraph 工具目录
-        Catalog[ ToolCatalogStore]
-        Registry[ InMemoryRegistry]
-        Session[ HubSessionStore]
-    end
+1. **用户端**
+   - MCP Client 发起 `POST /mcp` 请求
+   - Header 携带 `x-mcp-server-id`
 
-    subgraph 下游通信
-        ClientMCP[ DownstreamMcpClient]
-        RPC[ MCP JSON-RPC<br/>协议封装]
-        SSE[ SSE/JSON 响应<br/>解析]
-    end
+2. **Hub 网关层**
+   - `FastMcpHubGateway`：统一入口
+   - Header 校验：验证 `x-mcp-server-id`
+   - Tool Proxy Factory：动态生成工具代理
 
-    subgraph 下游服务器
-        Server1[ weather-demo<br/>/mcp]
-        Server2[ 其他 MCP<br/>服务器...]
-    end
+3. **工具目录层**
+   - `InMemoryRegistry`：服务器注册信息
+   - `ToolCatalogStore`：工具目录缓存
+   - `HubSessionStore`：MCP 会话 ID 缓存
 
-    Client -->|"POST /mcp<br/>x-mcp-server-id: xxx"| Gateway
-    Gateway --> Header
-    Header -->|"获取服务器信息"| Registry
-    Registry -->|"刷新工具目录"| Catalog
-    Catalog -->|"列出工具"| ToolFactory
-    ToolFactory -->|"动态生成<br/>代理函数"| ClientMCP
+4. **下游通信层**
+   - `DownstreamMcpClient`：下游调用客户端
+   - `MCP JSON-RPC`：协议封装
+   - `SSE/JSON Parser`：响应解析
 
-    ClientMCP -->|"initialize()"| RPC
-    RPC -->|"list_tools()"| Server1
-    RPC -->|"call_tool()"| Server1
-    Server1 -->|"SSE/JSON"| RPC
-    RPC --> SSE
-    SSE -->|"返回结果"| Client
+5. **下游服务器层**
+   - `weather-demo /mcp`
+   - 其他 MCP 服务器
+
+### 请求流向
+
+```text
+MCP Client
+  -> FastMcpHubGateway (/mcp)
+  -> Header 验证 (x-mcp-server-id)
+  -> InMemoryRegistry 查询 server
+  -> ToolCatalogStore 刷新/读取工具目录
+  -> Tool Proxy Factory 生成代理函数
+  -> DownstreamMcpClient
+  -> MCP JSON-RPC (initialize/list_tools/call_tool)
+  -> Downstream MCP Server
+  -> SSE/JSON 响应
+  -> 返回给 MCP Client
 ```
 
 ## 组件关系图
