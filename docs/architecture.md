@@ -2,47 +2,30 @@
 
 ## 整体架构
 
-> 为避免 GitHub Mermaid 渲染兼容问题，本节改为文本架构描述。
+```mermaid
+flowchart LR
+    A[MCP Client]
+    B[FastMcpHubGateway]
+    C[Header Check]
+    D[InMemoryRegistry]
+    E[ToolCatalogStore]
+    F[Tool Proxy Factory]
+    G[DownstreamMcpClient]
+    H[MCP JSON-RPC]
+    I[Downstream MCP Server]
+    J[SSE or JSON Parser]
 
-### 分层结构
-
-1. **用户端**
-   - MCP Client 发起 `POST /mcp` 请求
-   - Header 携带 `x-mcp-server-id`
-
-2. **Hub 网关层**
-   - `FastMcpHubGateway`：统一入口
-   - Header 校验：验证 `x-mcp-server-id`
-   - Tool Proxy Factory：动态生成工具代理
-
-3. **工具目录层**
-   - `InMemoryRegistry`：服务器注册信息
-   - `ToolCatalogStore`：工具目录缓存
-   - `HubSessionStore`：MCP 会话 ID 缓存
-
-4. **下游通信层**
-   - `DownstreamMcpClient`：下游调用客户端
-   - `MCP JSON-RPC`：协议封装
-   - `SSE/JSON Parser`：响应解析
-
-5. **下游服务器层**
-   - `weather-demo /mcp`
-   - 其他 MCP 服务器
-
-### 请求流向
-
-```text
-MCP Client
-  -> FastMcpHubGateway (/mcp)
-  -> Header 验证 (x-mcp-server-id)
-  -> InMemoryRegistry 查询 server
-  -> ToolCatalogStore 刷新/读取工具目录
-  -> Tool Proxy Factory 生成代理函数
-  -> DownstreamMcpClient
-  -> MCP JSON-RPC (initialize/list_tools/call_tool)
-  -> Downstream MCP Server
-  -> SSE/JSON 响应
-  -> 返回给 MCP Client
+    A -->|POST /mcp| B
+    B --> C
+    C -->|x-mcp-server-id| D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> H
+    H --> J
+    J --> A
 ```
 
 ## 组件关系图
