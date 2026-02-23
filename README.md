@@ -206,3 +206,19 @@ async with httpx.AsyncClient(headers={"x-mcp-server-id": server_id}) as client:
 - Downstream weather server is implemented with official FastMCP (streamable HTTP transport).
 - Tool metadata cache refreshes on server registration and periodically in background.
 - Raw weather tool output is native text (not custom content/isError wrapping in downstream).
+
+## SkillKit Demo (Local Skills)
+
+This repo also contains a tiny SkillKit demo:
+
+- Demo runner: `skillkit_demo.py`
+- Sample skill: `skills/code-reviewer/SKILL.md`
+
+Run:
+
+```bash
+cd ~/myagent
+source .venv/bin/activate
+uv pip install skillkit
+uv run python skillkit_demo.py
+```
