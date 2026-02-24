@@ -107,6 +107,21 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 
 ---
 
+## 例子：x-profile-analyzer（Skill 依赖 camofox 能力，但它本身不是 Plugin）
+`x-profile-analyzer` 是一个 **Skill + Python 脚本**，用于分析 X/Twitter 用户画像。
+
+关键点：
+- 它本身**不会给 OpenClaw 增加新系统能力**（不是 Gateway plugin），只是把“怎么抓数据、怎么分析、输出什么格式”固化成 SOP。
+- 它在抓取阶段通常需要 **Camofox server** 可用（文档里写死了 `http://localhost:9377`，用于 Nitter 翻页/分页）。
+  - 这意味着：从“能力依赖”角度，它依赖 camofox；
+  - 但从“实现形态”角度，它不一定必须由 `camofox-browser` 插件来提供，只要同等的 camofox server 在本机可用即可。
+
+一句话对比：
+- `camofox-browser`：**Plugin**，把浏览器自动化能力“接进 OpenClaw 并可治理”。
+- `x-profile-analyzer`：**Skill**，消费上述能力（或同等能力）完成一个具体任务。
+
+---
+
 ## 相关命令（记忆用）
 - `openclaw plugins list`
 - `openclaw plugins info <id>`
