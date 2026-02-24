@@ -85,6 +85,28 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 
 ---
 
+## 例子：camofox-browser（用插件把“浏览器自动化”接进来）
+`camofox-browser` 是一个典型的“功能型插件”：它把 **Camoufox/反检测浏览器自动化**接进 OpenClaw。
+
+你能从这个例子理解三件事：
+1) **插件提供能力**：它不是 prompt，而是 Gateway 加载后提供一整套能力（可能包含 tool、服务配置、连接管理等）。
+2) **配置可治理**：它有自己的 `configSchema`（例如 server URL、是否 autoStart、会话上限等），配置错了会在校验阶段被拦。
+3) **allowlist 是安全阀**：在 `openclaw plugins list` 里如果看到类似 `error: not in allowlist`，说明插件虽然“可发现”，但被 `plugins.allow` 白名单策略挡住了（公司环境通常会这样做，避免随便加载本地插件）。
+
+### 你本机上能看到的现象（示例）
+- `openclaw plugins list --json` 显示 `camofox-browser`，但状态可能是 `disabled`，并伴随 `not in allowlist`。
+
+### 这类插件一般怎么用（概念流程）
+- 把插件加入允许列表（`plugins.allow`）
+- 启用插件（`plugins.entries.camofox-browser.enabled = true` 或 `openclaw plugins enable camofox-browser`）
+- 配置插件（例如 camofox server 的 `url/port/autoStart/maxSessions...`）
+- 重启 Gateway 生效
+- 然后它提供的“浏览器能力”才会以 tools/服务的形式对 agent 可用
+
+> 备注：具体 tool 名称和调用方式取决于插件实现；重点是理解：**插件=接入一坨新能力 + 受 schema/allowlist/enable 治理**。
+
+---
+
 ## 相关命令（记忆用）
 - `openclaw plugins list`
 - `openclaw plugins info <id>`
