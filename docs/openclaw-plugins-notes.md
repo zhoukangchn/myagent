@@ -153,6 +153,18 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 
 ---
 
+## 官方口径（引用点，方便写公司文档）
+OpenClaw 官方把插件称为 **Plugins (Extensions)**，定义为 **Gateway 进程内加载的扩展模块**。
+
+建议引用以下官方文档页面（本地路径 / 线上链接二选一放到交付物里）：
+- 插件系统总览：`docs/tools/plugin.md` / <https://docs.openclaw.ai/tools/plugin>
+- 插件 manifest + schema（强校验来源）：`docs/plugins/manifest.md` / <https://docs.openclaw.ai/plugins/manifest>
+- 插件管理命令（install/enable/doctor）：`docs/cli/plugins.md` / <https://docs.openclaw.ai/cli/plugins>
+- Browser tool（自带浏览器能力定义）：`docs/tools/browser.md` / <https://docs.openclaw.ai/tools/browser>
+- Chrome 扩展接管机制：`docs/tools/chrome-extension.md` / <https://docs.openclaw.ai/tools/chrome-extension>
+
+---
+
 ## 相关命令（记忆用）
 - `openclaw plugins list`
 - `openclaw plugins info <id>`
