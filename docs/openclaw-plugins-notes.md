@@ -100,14 +100,19 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 - **定位**
   - `browser` tool：通用网页自动化/验证，覆盖面广（打开页面、点/填、截图、PDF、读可访问树）。
   - `camofox-browser`：更偏“反检测/风控更严的网站”的浏览器自动化能力底座。
+- **依赖与“授权/接管”模型（很容易被误解）**
+  - `browser` tool **需要真实浏览器环境**：控制的是 Chromium 系（Chrome/Brave/Edge/Chromium）。系统上没有可用浏览器/相关依赖时会失败或功能受限。
+  - `browser` tool 有两种常见控制模式：
+    - `openclaw` profile：OpenClaw 启动一个**隔离的专用浏览器 profile**（不接管你的日常浏览器）。你需要做的是“在这个 profile 里登录网站账号”（属于网站登录，不是控制授权）。
+    - `chrome` profile：通过 **Chrome 扩展 Relay 接管你现有 Chrome tab**。这时需要你在目标 tab 上点击扩展按钮 **Attach**（badge 显示 `ON`），明确授权控制该 tab。
 - **浏览器内核**
-  - `browser` tool：Chromium 系（Chrome/Brave/Edge/Chromium）+ CDP/Playwright。
+  - `browser` tool：Chromium 系 + CDP/Playwright（功能一等公民，集成度高）。
   - `camofox-browser`：Firefox 系（Camoufox/Camoufox server，目标是更抗检测）。
 - **抗检测能力**
   - `browser` tool：强在可控与功能完整；对强风控站点可能更容易被识别。
   - `camofox-browser`：优势通常在“更像真人”，用于绕开/缓解反爬。
 - **运维与生态**
-  - `browser` tool：OpenClaw 官方一等公民（profiles、截图/快照/act、Chrome 扩展接管、节点代理等都集成得更完整）。
+  - `browser` tool：OpenClaw 官方一等公民（profiles、截图/快照/act、扩展接管、节点代理等都集成得更完整）。
   - `camofox-browser`：作为插件提供“另一条浏览器路线”，适合当某些站点的专项武器。
 
 经验法则：
