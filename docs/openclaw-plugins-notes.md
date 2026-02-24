@@ -45,6 +45,9 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 
 ### 6) Skills 打包分发
 - 插件 manifest 可以列出 skill 目录，把“能力 + SOP”一起交付。
+- 但要注意：**Skill 也能做到“安装一致”（同一份 SKILL.md/脚本分发给所有人）**，只是它保证的更偏“SOP/流程一致”。
+  - Skill：流程一致；但底层依赖（可用 tools、二进制、网络/权限、环境变量）仍可能因机器/配置不同而漂。
+  - Plugin：把能力接口（tool/schema、服务、命令、通道等）装进 Gateway，整体更适合“稳定接口 + 最小权限 + 可运维”。
 
 ---
 
