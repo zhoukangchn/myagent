@@ -93,6 +93,27 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 - 在一些站点上，**比普通 headless 更不容易被识别/封锁**（反爬/风控场景更稳）。
 - 把浏览器能力做成**可治理的服务组件**：可配置、可限流、可控并发、可回收会话。
 
+### 和 OpenClaw 自带的 browser tool（agent-browser）怎么选？
+> OpenClaw 自带的“浏览器能力”通常指 `browser` tool（OpenClaw-managed Chromium + Playwright/CDP + 可选 Chrome 扩展接管）。
+
+对比要点：
+- **定位**
+  - `browser` tool：通用网页自动化/验证，覆盖面广（打开页面、点/填、截图、PDF、读可访问树）。
+  - `camofox-browser`：更偏“反检测/风控更严的网站”的浏览器自动化能力底座。
+- **浏览器内核**
+  - `browser` tool：Chromium 系（Chrome/Brave/Edge/Chromium）+ CDP/Playwright。
+  - `camofox-browser`：Firefox 系（Camoufox/Camoufox server，目标是更抗检测）。
+- **抗检测能力**
+  - `browser` tool：强在可控与功能完整；对强风控站点可能更容易被识别。
+  - `camofox-browser`：优势通常在“更像真人”，用于绕开/缓解反爬。
+- **运维与生态**
+  - `browser` tool：OpenClaw 官方一等公民（profiles、截图/快照/act、Chrome 扩展接管、节点代理等都集成得更完整）。
+  - `camofox-browser`：作为插件提供“另一条浏览器路线”，适合当某些站点的专项武器。
+
+经验法则：
+- 日常自动化/信息采集：优先用 **`browser` tool**。
+- 遇到强反爬、Chromium 更容易被拦的场景：再考虑 **`camofox-browser`**（或让 Skill 在失败时降级切换）。
+
 你能从这个例子理解三件事：
 1) **插件提供能力**：它不是 prompt，而是 Gateway 加载后提供一整套能力（可能包含 tool、服务配置、连接管理等）。
 2) **配置可治理**：它有自己的 `configSchema`（例如 server URL、是否 autoStart、会话上限等），配置错了会在校验阶段被拦。
