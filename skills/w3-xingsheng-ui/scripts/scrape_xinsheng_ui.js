@@ -17,6 +17,8 @@ function parseArgs(argv) {
     headless: false,
     slowMo: 0,
     userDataDir: path.resolve('.browser-profile'),
+    browserChannel: '',
+    browserPath: '',
   };
 
   for (let i = 2; i < argv.length; i++) {
@@ -36,6 +38,8 @@ function parseArgs(argv) {
     else if (a === '--headless') out.headless = true;
     else if (a === '--slow-mo') out.slowMo = Number(n || 0), i++;
     else if (a === '--user-data-dir') out.userDataDir = path.resolve(n || '.browser-profile'), i++;
+    else if (a === '--browser-channel') out.browserChannel = n || '', i++;
+    else if (a === '--browser-path') out.browserPath = n || '', i++;
   }
   return out;
 }
@@ -66,23 +70,59 @@ function resolveCookie(args) {
   return '';
 }
 
-async function createContext(args) {
-  fs.mkdirSync(args.userDataDir, { recursive: true });
-  const contextOptions = {
+function buildLaunchCandidates(args) {
+  const base = {
     headless: args.headless,
     slowMo: args.slowMo,
+    storageState: args.storageState || undefined,
   };
 
-  if (args.storageState) contextOptions.storageState = args.storageState;
+  if (args.browserPath) return [{ ...base, executablePath: args.browserPath }];
+  if (args.browserChannel) return [{ ...base, channel: args.browserChannel }];
 
-  const context = await chromium.launchPersistentContext(args.userDataDir, contextOptions);
-
-  const cookie = resolveCookie(args);
-  if (cookie) {
-    await context.setExtraHTTPHeaders({ Cookie: cookie });
+  const candidates = [];
+  if (process.platform === 'win32') {
+    candidates.push(
+      { ...base, channel: 'chrome' },
+      { ...base, executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' },
+      { ...base, executablePath: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' },
+      { ...base, channel: 'msedge' },
+      { ...base, executablePath: 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe' }
+    );
+  } else {
+    candidates.push(
+      { ...base, channel: 'chrome' },
+      { ...base, executablePath: '/usr/bin/google-chrome-stable' },
+      { ...base, executablePath: '/usr/bin/google-chrome' },
+      { ...base, executablePath: '/usr/bin/chromium' },
+      { ...base, executablePath: '/usr/bin/chromium-browser' }
+    );
   }
 
-  return context;
+  candidates.push(base); // fallback to Playwright default browser
+  return candidates;
+}
+
+async function createContext(args) {
+  fs.mkdirSync(args.userDataDir, { recursive: true });
+  const candidates = buildLaunchCandidates(args);
+  let lastError = null;
+
+  for (const opt of candidates) {
+    try {
+      const context = await chromium.launchPersistentContext(args.userDataDir, opt);
+      const cookie = resolveCookie(args);
+      if (cookie) await context.setExtraHTTPHeaders({ Cookie: cookie });
+
+      const mode = opt.channel ? `channel=${opt.channel}` : (opt.executablePath ? `path=${opt.executablePath}` : 'playwright-default');
+      console.log(`[browser] launched with ${mode}`);
+      return context;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error('Failed to launch browser');
 }
 
 async function extractList(page) {
@@ -168,7 +208,7 @@ async function clickNext(page) {
 async function main(argv = process.argv) {
   const args = parseArgs(argv);
   if (!args.url || !args.out) {
-    console.error('Usage: node scrape_xinsheng_ui.js --url <list-url> --out <file> [--pages 1] [--detail] [--format json|csv] [--wait-ms 2500] [--max-items 0] [--cookie "k=v;..."] [--cookie-file cookies.txt] [--storage-state state.json] [--headless] [--slow-mo 0] [--user-data-dir ./.browser-profile]');
+    console.error('Usage: node scrape_xinsheng_ui.js --url <list-url> --out <file> [--pages 1] [--detail] [--format json|csv] [--wait-ms 2500] [--max-items 0] [--cookie "k=v;..."] [--cookie-file cookies.txt] [--storage-state state.json] [--headless] [--slow-mo 0] [--user-data-dir ./.browser-profile] [--browser-channel chrome] [--browser-path "C:\\...\\chrome.exe"]');
     process.exit(1);
   }
 
@@ -222,6 +262,7 @@ if (require.main === module) {
 module.exports = {
   parseArgs,
   resolveCookie,
+  buildLaunchCandidates,
   createContext,
   main,
 };

@@ -46,6 +46,10 @@ node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 2 --out outputs/xi
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 5 --max-items 120 --out outputs/posts.csv --format csv`
 - Reuse local persistent profile:
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --user-data-dir ./.browser-profile --out outputs/posts.json`
+- Windows/local Chrome explicit channel:
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --out outputs/posts.json`
+- Windows/local Chrome explicit path:
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --out outputs/posts.json`
 - Force headless (optional fallback):
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --headless --out outputs/posts.json`
 - Start visible login and save storage state:
