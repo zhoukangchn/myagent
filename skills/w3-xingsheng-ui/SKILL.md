@@ -25,7 +25,7 @@ node scripts/scrape_xinsheng_ui.js \
 For CSV output:
 
 ```bash
-node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 2 --out outputs/xinsheng.csv --format csv
+node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --pages 2 --out outputs/xinsheng.csv --format csv
 ```
 
 ## Workflow
@@ -41,23 +41,23 @@ node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 2 --out outputs/xi
 ## Commands
 
 - List-only extraction:
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 3 --out outputs/posts.json`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --pages 3 --out outputs/posts.json`
 - List + detail text:
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 2 --detail --out outputs/posts.json`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --pages 2 --detail --out outputs/posts.json`
 - Limit records:
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 5 --max-items 120 --out outputs/posts.csv --format csv`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --pages 5 --max-items 120 --out outputs/posts.csv --format csv`
 - Reuse local persistent profile:
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --user-data-dir ./.browser-profile --out outputs/posts.json`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --user-data-dir ./.browser-profile --out outputs/posts.json`
 - Windows/local Chrome explicit channel:
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --out outputs/posts.json`
 - Windows/local Chrome explicit path:
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --out outputs/posts.json`
 - Force headless (optional fallback):
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --headless --out outputs/posts.json`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --headless --out outputs/posts.json`
 - Start visible login and save storage state:
-  - `node scripts/save_storage_state_ui.js --url "https://xinsheng.huawei.com/next/index/#/home" --out ./storageState.json`
+  - `node scripts/save_storage_state_ui.js --url "https://xinsheng.huawei.com/next/index/#/home" --browser-channel chrome --out ./storageState.json`
 - Reuse storage state:
-  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --storage-state ./storageState.json --out outputs/posts.json`
+  - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --storage-state ./storageState.json --out outputs/posts.json`
 
 ## Notes
 
