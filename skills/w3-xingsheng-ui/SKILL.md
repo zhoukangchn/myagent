@@ -59,6 +59,40 @@ node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome -
 - Reuse storage state:
   - `node scripts/scrape_xinsheng_ui.js --url "<list-url>" --browser-channel chrome --storage-state ./storageState.json --out outputs/posts.json`
 
+## Login State & How to Decide Whether Login Is Required
+
+Use this checklist after opening the list URL:
+
+1. If the page redirects to login, or shows login/scan/verification UI, treat as `LOGIN_REQUIRED`.
+2. If the page stays on list URL and post cards are visible, treat as `LOGIN_OK`.
+3. If no cards are visible and page shows permission/login hints, treat as `LOGIN_REQUIRED`.
+
+Recommended sequence on Windows intranet:
+
+```bash
+# Step 1: login and keep same profile directory
+node scripts/save_storage_state_ui.js \
+  --url "https://xinsheng.huawei.com/next/index/#/home" \
+  --browser-channel chrome \
+  --user-data-dir "D:\\xinsheng-profile" \
+  --timeout-ms 300000 \
+  --out ./storageState.json
+
+# Step 2: scrape with the exact same profile directory
+node scripts/scrape_xinsheng_ui.js \
+  --url "<list-url>" \
+  --browser-channel chrome \
+  --user-data-dir "D:\\xinsheng-profile" \
+  --out outputs/posts.json
+```
+
+Troubleshooting if login is lost:
+
+- Keep `--user-data-dir` identical between login and scrape runs (prefer absolute path).
+- Avoid mixing profile mode and `--storage-state` until profile reuse is verified.
+- Close all manual Chrome windows using the same profile before running script.
+- If company policy clears session frequently, re-login with Step 1.
+
 ## Notes
 
 - Target only public content and respect site terms/policies.
