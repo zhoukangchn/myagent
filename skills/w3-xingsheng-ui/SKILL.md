@@ -7,6 +7,16 @@ description: Scrape and summarize public list/detail content from Huawei Xinshen
 
 Use this skill to collect structured data from Xinsheng pages with a visible browser (not headless by default).
 
+
+## Deprecation Notice
+
+This skill is deprecated. Use `w3-xingsheng-ui-v3` for new tasks.
+
+Reasons:
+- Windows intranet local-browser flow is actively maintained in v3.
+- Login-state guidance and troubleshooting are maintained in v3.
+- Trend analysis improvements continue in v3.
+
 ## Quick Start (Windows Intranet / Local Chrome First)
 
 Run from the skill directory:
