@@ -208,8 +208,18 @@ async function clickNext(page) {
 async function main(argv = process.argv) {
   const args = parseArgs(argv);
   if (!args.url || !args.out) {
-    console.error('Usage: node scrape_xinsheng_ui.js --url <list-url> --out <file> [--pages 1] [--detail] [--format json|csv] [--wait-ms 2500] [--max-items 0] [--cookie "k=v;..."] [--cookie-file cookies.txt] [--storage-state state.json] [--headless] [--slow-mo 0] [--user-data-dir ./.browser-profile] [--browser-channel chrome] [--browser-path "C:\\...\\chrome.exe"]');
+    console.error('Usage: node scrape_xinsheng_ui.js --url <list-url> --browser-channel chrome --pages 1 --out <file.json> [--detail] [--wait-ms 2500] [--max-items 0] [--headless] [--slow-mo 0] [--user-data-dir ./.browser-profile] [--browser-path "C:\\...\\chrome.exe"]');
     process.exit(1);
+  }
+
+  // v3 contract: non-login + JSON only
+  if (args.cookie || args.cookieFile || args.storageState) {
+    console.error('v3 non-login mode: do not pass --cookie/--cookie-file/--storage-state');
+    process.exit(2);
+  }
+  if ((args.format || '').toLowerCase() === 'csv' || args.out.toLowerCase().endsWith('.csv')) {
+    console.error('v3 JSON-only mode: use --out <file.json> and remove CSV options');
+    process.exit(2);
   }
 
   const context = await createContext(args);
