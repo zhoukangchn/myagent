@@ -1,24 +1,26 @@
 ---
 name: w3-xingsheng-ui
-description: Scrape and summarize public list/detail content from Huawei Xinsheng (xinsheng.huawei.com) using Playwright with a visible browser window (headed mode, real UI). Use when user wants non-headless scraping, needs to watch/operate login manually, reuse persistent local browser profile, paginate list pages, extract title/author/time/views/replies, pull detail text, or export JSON/CSV.
+description: Scrape and summarize public list/detail content from Huawei Xinsheng (xinsheng.huawei.com) using Playwright in headed mode while preferring local installed Chrome/Edge (especially for Windows intranet environments where browser downloads are blocked). Use when user needs visible browser automation, manual login/captcha handling, persistent local profile reuse, pagination, detail extraction, and JSON/CSV export.
 ---
 
 # w3-xingsheng-ui
 
 Use this skill to collect structured data from Xinsheng pages with a visible browser (not headless by default).
 
-## Quick Start
+## Quick Start (Windows Intranet / Local Chrome First)
 
 Run from the skill directory:
 
 ```bash
 npm i -D playwright
-npx playwright install chromium
 node scripts/scrape_xinsheng_ui.js \
   --url "https://xinsheng.huawei.com/next/index/#/list?id=713534611705233414&cid=&flag=all&sort=&type=all&p=1" \
+  --browser-channel chrome \
   --pages 2 \
   --out outputs/xinsheng.json
 ```
+
+> No `playwright install` is required when using local Chrome/Edge.
 
 For CSV output:
 
@@ -28,9 +30,9 @@ node scripts/scrape_xinsheng_ui.js --url "<list-url>" --pages 2 --out outputs/xi
 
 ## Workflow
 
-1. Install Playwright + Chromium.
+1. Install Playwright package only (`npm i -D playwright`).
 2. Start from a list URL (`#/list?...`).
-3. Launch visible browser with persistent profile (`.browser-profile/` by default).
+3. Launch visible browser with persistent profile (`.browser-profile/` by default), preferring local Chrome/Edge (`channel=chrome/msedge` or explicit executable path).
 4. Extract post cards (title/link/author/time/views/replies).
 5. Paginate with the “下一页” control until target pages are reached.
 6. Optionally fetch details (`--detail`) to pull article text.
