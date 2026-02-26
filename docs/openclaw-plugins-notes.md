@@ -24,6 +24,18 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 ---
 
 ## Plugin 能扩展哪些能力（分类）
+> 你可以粗分成两大类：**渠道扩展插件**（让 OpenClaw“接到哪里”）和 **功能增强插件**（让 OpenClaw“能做什么”）。
+
+### A) 渠道扩展插件（Channel plugins）
+- 目标：接入新的消息平台/通信渠道，让 OpenClaw 能收发消息、处理线程/群组等。
+- 配置位置通常在：`channels.<id>...`（而不是 `plugins.entries`）。
+- 例子（官方/常见）：Discord、Telegram、Slack、Teams、Matrix、Signal…（具体以 `openclaw plugins list` 为准）。
+
+### B) 功能增强插件（Capability / Tools / Integrations）
+- 目标：给 OpenClaw 增加新能力（新 tool、后台服务、命令、浏览器/语音/记忆等模块）。
+
+下面是更细的功能型子分类：
+
 ### 1) Agent Tools（最常见的扩展）
 - 注册自定义工具（函数）：例如 `jira_create_ticket`、`cmdb_lookup`、`deploy_service`。
 - 优点：
@@ -39,13 +51,10 @@ OpenClaw 的 Plugin（也叫 extension）是 Gateway 启动时加载的模块（
 - 新增 `openclaw xxx` 类命令，用于诊断、导入、同步、批处理。
 - 适合：把能力变成“确定性入口”，可在 CI/脚本里用。
 
-### 4) Channel 插件（聊天平台）
-- 接入新的聊天平台或扩展其能力；配置一般在 `channels.<id>...`。
-
-### 5) Provider/Auth 插件（模型鉴权）
+### 4) Provider/Auth 插件（模型鉴权）
 - 把 OAuth/device login/API key 管理接进 OpenClaw（`openclaw models auth ...`）。
 
-### 6) Skills 打包分发
+### 5) Skills 打包分发
 - 插件 manifest 可以列出 skill 目录，把“能力 + SOP”一起交付。
 - 但要注意：**Skill 也能做到“安装一致”（同一份 SKILL.md/脚本分发给所有人）**，只是它保证的更偏“SOP/流程一致”。
   - Skill：流程一致；但底层依赖（可用 tools、二进制、网络/权限、环境变量）仍可能因机器/配置不同而漂。
