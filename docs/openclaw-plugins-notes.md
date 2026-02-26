@@ -86,35 +86,34 @@ OpenClaw 的 Plugin（也叫 Extensions）是 Gateway 启动时加载的模块�
 
 ---
 
-## 例子 1：camofox-browser（功能增强插件：反检测浏览器能力底座）
-`camofox-browser` 把 **Camoufox/反检测浏览器自动化**接进 OpenClaw，常用于：渲染/滚动加载/分页/点击输入 + 更抗风控。
+## 例子 1：voice-call（功能增强插件：电话/语音通话能力）
+`voice-call` 是一个典型“功能增强插件”：把**外呼通知/通话对话**这类能力接进 OpenClaw。
 
-你能从它看到 plugin 的典型治理面：
-- 有自己的 `configSchema`（url/port/autoStart/maxSessions/...）
-- 可能被 `plugins.allow` 白名单拦（例如 `not in allowlist`）
-
-### 和 OpenClaw 自带 `browser` tool（agent-browser）对比（关键点）
-- **browser tool**：官方自带，主打通用网页自动化（Chromium 系 + CDP/Playwright）。
-  - 依赖真实 Chromium 环境。
-  - `chrome` profile 会涉及 Chrome 扩展 relay + 手动 attach tab。
-- **camofox-browser**：Firefox/Camoufox 路线，更偏反检测专项。
-
-经验法则：日常用 `browser`；遇强反爬再上 `camofox`。
+它能说明 plugin 的价值点：
+- 这是 OpenClaw 核心包里不会默认带的“重依赖/高风险”能力，适合做成可选插件。
+- 插件可以同时带：tool（给 agent 调用）、CLI 命令、以及 webhook/server 这类运行时组件。
 
 ---
 
-## 例子 2：x-profile-analyzer（Skill：消费 camofox 能力做一个任务）
-`x-profile-analyzer` 是 **Skill + Python 脚本**，用于分析 X/Twitter 用户画像。
+## 例子 2：memory-lancedb（功能增强插件：记忆槽位/向量检索）
+`memory-core` / `memory-lancedb` 这类属于“系统能力级”插件：它不是帮你写 SOP，而是改变 OpenClaw 的**记忆/检索实现**。
 
-关键点：
-- 它本身**不是 Gateway plugin**，不会新增系统能力；它是把任务流程固化成 SOP。
-- 它抓取阶段通常要求本机 `http://localhost:9377` 的 camofox server 可用（用于 Nitter 翻页/分页）。
-
-一句话：**Plugin 提供能力底座（camofox）；Skill 消费能力完成具体任务（x-profile-analyzer）。**
+它能说明 plugin 的价值点：
+- 这种能力无法靠 skill“写提示词”替代（skill 只能塞上下文，不能替换系统记忆模块）。
+- 通常通过 `plugins.slots.memory` 这类“槽位选择”来启用（互斥：同一时间只选一个 memory 插件）。
 
 ---
 
-## 例子 3：Channel 插件 vs message tool（用现成 Discord 讲清楚）
+## 例子 3：Provider/Auth 插件（模型/供应商鉴权接入）
+例如 `minimax-portal-auth` / `qwen-portal-auth` 这类插件，用来把 OAuth/device login/API key 管理接进 OpenClaw（让你能在 OpenClaw 里完成认证/写入 profile）。
+
+它能说明 plugin 的价值点：
+- 鉴权流程是“系统级行为”，skill 无法把 OAuth 流程变成 OpenClaw 的一等公民。
+- 公司环境里这类插件也最容易纳入审计与统一管控。
+
+---
+
+## 例子 4：Channel 插件 vs message tool（用现成 Discord 讲清楚）
 - **discord（channel 插件）**：负责“怎么把消息真正发到 Discord/怎么接收事件”。
 - **message（tool）**：agent 调用的统一 API（例如 `message.send`），背后会路由到当前 channel（这里就是 Discord）。
 
