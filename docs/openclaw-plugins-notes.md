@@ -9,6 +9,8 @@
 
 三者关系：**Plugin 可以提供 Tool/Skill；Skill 组合调用 Tool；Tool 是能力执行的最小单位。**
 
+> ✅ 核心结论（系统视角）：**skill + 脚本扩展的是“任务实现方式/工作流”，不是 OpenClaw 的“工具面（tool surface）”**；本质仍是在使用既有工具（如 `exec`）去运行外部进程。
+
 ---
 
 ## Plugin 是什么（精确定义）
