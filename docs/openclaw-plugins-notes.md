@@ -55,18 +55,34 @@ OpenClaw 的 Plugin（也叫 Extensions）是 Gateway 启动时加载的模块�
 
 ---
 
-## 什么时候必须上 Plugin？什么时候先 Skill/Cron 就够？
-### 先用 Skill/Cron 就够（PoC/个人效率优先）
-- 只是把流程写稳、输出一致 → **Skill**
-- 只是定时汇总/轮询检查 → **Cron**
-- 只是 PoC，短期个人用 → Skill + 现有通用 tools（如 exec/web_fetch/message/browser）
+## 核心解答：什么时候用 Plugin，而不是只用 Skill？
+先说最关键的一句：**Skill 解决“流程怎么跑”，Plugin 解决“系统有没有这项能力 + 能不能把它做成稳定接口并受治理”。**
 
-### 更应该写成 Plugin 的信号（公司交付常见）
-- 需要 **最小权限**（不想放开 `exec` 这种大杀器）
-- 需要 **强参数约束 + 稳定结构化返回**（schema）
-- 需要 **事件驱动监听/webhook/常驻连接**（而不是轮询）
-- 需要 **可运维/可交付**：启用/禁用、doctor 排错、版本管理、回滚、日志/观测
-- 需要 **团队复用**：同事装上就能用，不靠“会写 prompt 的那个人”
+### 只用 Skill 就够（流程编排 / PoC）
+满足这些特征时，先用 skill 最划算：
+- 目标主要是“把事情做成 SOP”（比如汇总、写报告、查页面、发通知）。
+- 能完全依赖现有 tools（例如 `browser` / `web_fetch` / `message` / `exec`）。
+- 允许一定的不确定性与人工兜底（PoC 阶段）。
+
+例子：
+- 每天 18:00 汇总 GitHub issue → 写周报 → 发到 Discord（cron + skill + message）。
+
+### 明确该上 Plugin 的场景（系统能力 / 工程化交付）
+出现任意一条，基本就说明该插件化了：
+1) **要新增一个“干净的 tool 接口”（不想靠 exec）**
+   - 例：`jira_create_ticket` / `cmdb_lookup` / `deploy_service`
+   - 价值：schema 强约束 + 结构化返回 + 更可复用。
+2) **要最小权限（安全治理）**
+   - 如果你的 skill 只能靠 `exec + curl` 间接调用外部系统，那权限面太大；
+   - 插件可以把权限收敛成“只允许某域名/某动作”的专用 tool。
+3) **要事件驱动/常驻监听（webhook/队列/WS）**
+   - 例：告警 webhook 触发分诊、工单回调自动更新、消费队列。
+4) **要接入新渠道（Channel）或做深度渠道适配**
+   - 例：接飞书/Teams/Matrix 等（channel 本身属于插件扩展点）。
+5) **要团队交付、可运维**
+   - 例：版本化、doctor 排错、配置 schema 校验、启用/禁用、回滚。
+
+> 实操路线（公司里最好用）：**先 skill PoC → 把“最不稳/最危险/最核心接口”的那一段升级成 plugin**（通常是外部系统集成那块）。
 
 ---
 
