@@ -67,22 +67,25 @@ OpenClaw 的 Plugin（也叫 Extensions）是 Gateway 启动时加载的模块�
 例子：
 - 每天 18:00 汇总 GitHub issue → 写周报 → 发到 Discord（cron + skill + message）。
 
-### 明确该上 Plugin 的场景（系统能力 / 工程化交付）
-出现任意一条，基本就说明该插件化了：
-1) **要新增一个“干净的 tool 接口”（不想靠 exec）**
-   - 例：`jira_create_ticket` / `cmdb_lookup` / `deploy_service`
-   - 价值：schema 强约束 + 结构化返回 + 更可复用。
-2) **要最小权限（安全治理）**
-   - 如果你的 skill 只能靠 `exec + curl` 间接调用外部系统，那权限面太大；
-   - 插件可以把权限收敛成“只允许某域名/某动作”的专用 tool。
-3) **要事件驱动/常驻监听（webhook/队列/WS）**
-   - 例：告警 webhook 触发分诊、工单回调自动更新、消费队列。
-4) **要接入新渠道（Channel）或做深度渠道适配**
-   - 例：接飞书/Teams/Matrix 等（channel 本身属于插件扩展点）。
-5) **要团队交付、可运维**
-   - 例：版本化、doctor 排错、配置 schema 校验、启用/禁用、回滚。
+### “必须用 Plugin” 的硬场景（从系统能力角度判断）
+> 如果你的需求是“让 OpenClaw 本身多一种能力/入口/模块”，那就是 plugin；skill 只能编排已有能力。
 
-> 实操路线（公司里最好用）：**先 skill PoC → 把“最不稳/最危险/最核心接口”的那一段升级成 plugin**（通常是外部系统集成那块）。
+1) **接入新 Channel（新聊天平台）**
+- 需要收发消息、接事件回调、线程/群语义适配 → 必须 channel plugin。
+
+2) **新增一个真正的 Tool（tool surface 增量）**
+- 你要一个带 schema 的 `xxx_tool`，让 agent 像用内置 tool 一样调用，而不是 `exec + 脚本` 绕路。
+
+3) **常驻服务 / 事件驱动入口**
+- Webhook listener、队列 consumer、WebSocket、长期 polling 等，需要 Gateway 内常驻运行。
+
+4) **替换/扩展系统级模块（例如 memory slot）**
+- 想把记忆/检索实现做成可切换插槽、影响系统行为 → 必须 plugin。
+
+5) **Provider/Auth（鉴权/登录流程接入 OpenClaw）**
+- OAuth/device login/profile 写入属于系统级能力 → 必须 plugin。
+
+> 实操路线（公司里最好用）：**先 skill PoC → 把“最核心/最危险/最不稳的系统集成段”升级成 plugin**。
 
 ---
 
