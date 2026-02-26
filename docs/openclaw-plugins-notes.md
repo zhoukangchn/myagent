@@ -170,6 +170,27 @@ OpenClaw 官方把插件称为 **Plugins (Extensions)**，定义为 **Gateway �
 
 ---
 
+## ChatGPT 对话交叉核对（Openclaw 插件介绍）
+已对“Openclaw 插件介绍”聊天内容做交叉核对，结论：**整体方向正确，可采纳约 80-90%**，但公司文档建议统一按官方术语落地。
+
+### 可直接采纳的点
+- Plugin 是可安装扩展模块，用来给 OpenClaw 增加核心之外能力。
+- 常见扩展面：Channel、Tools/Integrations、CLI/Gateway 扩展。
+- 工程关键项：
+  - 插件需要 `openclaw.plugin.json`（含 `configSchema`）
+  - 包需声明 `package.json` 的 `openclaw.extensions`
+
+### 需要加“官方口径约束”的点
+- 避免把第三方社区案例写成官方能力（需单独标注“社区/第三方”）。
+- 避免把不存在或未确认的 hook 名称写死（只写“支持插件 hooks”，不写猜测事件名）。
+- Browser 相关要加前提：`browser` tool 依赖 Chromium 环境；`chrome` 模式需扩展 attach。
+
+### 建议写法（公司评审版一句话）
+- **Skill** 扩展“任务实现方式/工作流”；
+- **Plugin** 扩展“系统能力面（tool surface/channel/service）”，并通过 manifest+schema+allowlist 进行治理。
+
+---
+
 ## 相关命令（记忆用）
 - `openclaw plugins list`
 - `openclaw plugins info <id>`
