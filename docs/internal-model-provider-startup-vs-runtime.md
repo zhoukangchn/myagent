@@ -1,95 +1,65 @@
-# 内部模型接入 OpenClaw：启动时 vs 运行时（整理稿）
+# 内部模型接入 OpenClaw：只抓两个时刻（启动时 vs 运行时）
 
-> 背景：领导要求对“内部模型接入 OpenClaw 为什么要用 Plugin”做两段分析：启动时（startup）与运行时（runtime）。
-> 目标：用 OpenClaw 官方机制来解释，而不是靠类比。
+> 这份稿子不是“官方机制综述”，而是为了把你会上讲的那句话讲透：
+> **内部模型要接入 OpenClaw，为什么要用 Plugin？Skill 的上限是什么？**
 
 ---
 
 ## 一句话结论
-内部模型要成为 OpenClaw 的一等公民（可被选择为默认模型、可统一鉴权、可审计/可运维），应通过 **Provider/Auth Plugin** 接入：
-- **启动时**完成“发现 + 严格校验 + 注册 provider/auth”
-- **运行时**完成“每次调用的执行质量（鉴权/超时/重试/限流/观测）”
-
-Skill 的上限是“会话内通过脚本临时调用”，无法扩展 OpenClaw 的系统模型层。
+- **用 Plugin 接入内部模型**：是“系统级能力接入”（启动时装进系统，运行时由它执行）。
+- **用 Skill 调内部模型**：通常只是“会话级脚本代理”（在某次对话里跑脚本/HTTP），不等价于系统接入。
 
 ---
 
-## 1) 启动时（Startup）：把内部模型接入系统模型层
-启动时关注：OpenClaw 能否“认识”你的内部模型，以及能否把接入纳入系统治理。
+## 1) 启动时（Startup）：为什么必须是 Plugin 的主战场
+启动时要解决的是：**把内部模型接入变成系统能力**，而不是散落在某个脚本里。
 
-### 1.1 Plugin discovery（发现/加载入口）
-Gateway 启动时会按官方 precedence 扫描插件来源（如 `plugins.load.paths`、workspace/global extensions、bundled 等）。
+Plugin 在启动时做的典型动作：
+- **加载与初始化**：读取配置（endpoint/租户/路由）、准备 HTTP client/连接池
+- **鉴权底座**：token 获取/刷新策略、密钥来源、权限边界
+- **治理底座**：默认超时、重试、限流、日志字段、审计钩子
+- **注册入口**：把内部模型暴露为系统认识的能力入口（常见两种形态）：
+  - 形态 A：注册成“模型 provider”（系统层可选择/可鉴权/可路由）
+  - 形态 B：注册成“tool”（例如 `internal_llm.generate`），由 agent 通过 tool call 调用
 
-这一步决定：
-- 插件是否能被找到
-- 若多个来源有同 id，哪个生效
-
-### 1.2 Manifest + Schema validation（严格校验，且不执行插件代码）
-每个插件必须提供 `openclaw.plugin.json`，并内嵌 `configSchema`。
-OpenClaw 在启动/配置校验阶段使用 manifest + JSON Schema 进行严格验证，**不会为了校验去执行插件代码**。
-
-这一步的价值：
-- 把错误前置到启动期（配置错直接 fail fast）
-- 避免运行期才发现“参数缺失/类型错误/未知字段”等问题
-
-### 1.3 Registration（注册 provider/auth，成为一等公民）
-通过 Provider/Auth plugin，在 register 阶段调用类似 `api.registerProvider(...)`，把：
-- provider id（内部供应商）
-- auth methods（OAuth / API key / device code 等）
-- 产出的 auth profiles（credential 写入）
-
-纳入 OpenClaw。
-
-这一步的结果是：
-- OpenClaw 支持 `openclaw models auth login --provider <id>`
-- 内部模型可以出现在“可选模型/默认模型”的系统配置里
-- 鉴权与配置变成系统级能力，而不是会话内脚本
-
-> 启动时结论：**Plugin 让内部模型进入 OpenClaw 的“系统模型层”**（discoverable、schema-validated、可配置、可登录）。
+启动时你要强调的点：
+- **这里决定“系统有没有这项能力”**。
 
 ---
 
-## 2) 运行时（Runtime）：每一次调用怎么可靠可控
-运行时关注：一次具体模型调用是否稳定、可观测、可治理。
+## 2) 运行时（Runtime）：Plugin 在哪里真正干活
+运行时要解决的是：**每一次调用内部模型的执行质量**。
 
-### 2.1 Dispatch：从“选择模型”到“实际调用实现”
-当 agent 在某次请求中选择内部模型，OpenClaw 会走 provider 实现路径执行请求。
+当模型需要调用内部模型时：
+- 触发一次调用（要么是选中 provider 进行推理，要么是发出 tool call）
+- Plugin 执行真正的 I/O：
+  - 发请求、处理超时
+  - 重试/退避/限流
+  - 失败分类与可解释错误
+  - 记录日志/指标/审计（谁、何时、调用哪个模型、耗时、失败原因）
+  - 必要时降级（切备、提示用户补参数、转人工）
 
-### 2.2 Execution quality：可靠性与治理在运行时落地
-Provider/Auth plugin（以及其内部 HTTP client/中间件）通常需要承担：
-- token 获取与刷新（过期处理）
-- 超时/重试策略
-- 限流/退避（保护内部推理服务）
-- 失败分类与降级（切备、返回可解释错误）
-- 观测：日志/指标/审计（谁调用了哪个模型、耗时、失败原因）
-
-> 运行时结论：**Plugin 决定每一次调用的执行质量**（稳定性与可观测）。
-
----
-
-## 3) 为什么 Skill 不够（明确上限）
-Skill 能做的通常是：
-- 在某个会话里编排：`exec` 跑脚本/HTTP 请求去调用内部模型
-
-但 Skill 做不到：
-- 注册 provider（让 OpenClaw “认识”一种新模型供应商）
-- 把鉴权做成系统级登录流程（profiles/credentials）
-- 把模型选择/默认模型配置纳入 OpenClaw 的模型体系
-- 在网关层统一做校验/限流/审计（只能靠脚本自律）
-
-因此：Skill 方案更像“会话级临时代理”；Plugin 方案才是“系统级接入”。
+运行时你要强调的点：
+- **这里决定“每次调用稳不稳、可不可控、能不能解释”**。
 
 ---
 
-## 4) 推荐落地路线（最实用）
-1. **先用 skill + 脚本 PoC**验证业务价值（快）
-2. 把内部模型接入升级为 **Provider/Auth plugin**（把鉴权/路由/校验/观测收敛到网关）
-3. 再用 skills 固化不同团队 SOP（输出口径/调用策略/失败兜底）
+## 3) Skill 的上限（为什么它最多只能做“会话内脚本调用”）
+Skill 能做的是：
+- 把“怎么调用内部模型”的流程写成 SOP，指导模型在对话里：
+  - 用 `exec` 跑脚本
+  - 或者直接发 HTTP 请求
+
+但它做不到（或者说成本极高且治理差）：
+- 让内部模型成为系统级能力入口（长期可维护、可观测、统一治理）
+- 让鉴权/限流/审计集中在网关层
+
+一句话收尾：
+- **Skill 能教“怎么临时调用”，Plugin 才能把能力“装进系统并长期运行”。**
 
 ---
 
-## 参考（官方文档方向）
-- Plugins（能力清单、发现顺序、配置规则）
-- Plugin manifest（`openclaw.plugin.json` + `configSchema`）
-- CLI plugins（install/enable/doctor）
-- Provider plugins（model auth）相关章节（在 plugins doc 的 Provider plugins 小节）
+## 4) 你给领导的 30 秒版本（可直接背）
+- **启动时**：用 Plugin 把内部模型加载进系统，初始化鉴权/客户端/治理底座，并注册能力入口。
+- **运行时**：每次请求由 Plugin 执行，统一处理超时/重试/限流/审计，保证调用质量。
+- **只用 Skill**：最多在会话里跑脚本调用内部模型，不是系统级接入。
