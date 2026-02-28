@@ -242,13 +242,21 @@ openclaw plugins info voice-call
 ## 9. 常见问题备答（按官方机制回答，不靠“类比”）
 
 **Q1：Plugin 和 Skill 最大区别？**
-- Plugin 扩展“系统能力面”（tools/commands/http handlers/services/skills shipping）；Skill 是“教 agent 如何使用 tools”的流程层。
+- Plugin 扩展“系统能力面”（tools/commands/http handlers/services/provider auth/skills shipping）；Skill 是“教 agent 如何使用 tools”的流程层。
 
-**Q2：为什么不用 exec 跑脚本就行？**
-- PoC 可以；但 plugin tool 是一等接口：schema 校验、可观测、可审计、可限流、配置受 manifest 约束。
+**Q2：为什么内部模型接入 OpenClaw 往往必须用 Plugin？**
+- 因为这是“系统模型层”的扩展：需要把内部模型变成一等公民（可配置为默认模型、可统一鉴权、可审计/可运维）。官方提供的方式是 **Provider/Auth plugins**（插件注册 provider + auth flow）。
+- Skill 顶多在某个会话里通过 `exec` 跑脚本去调用内部模型（临时代理），无法让 OpenClaw 认识一个新的 provider，也无法把鉴权/配置/模型选择纳入系统治理。
 
-**Q3：Plugin 为什么要 manifest + schema？**
-- 官方目的就是：在不执行插件代码的情况下完成配置校验，减少运行时事故面。
+**Q3：领导要求你分析“启动时 vs 运行时”，这个例子怎么拆？**
+- **启动时（Startup）**：插件被发现并加载（discovery），配置按 manifest 的 `configSchema` 严格校验（validation，不执行插件代码），随后插件注册 provider/auth（registration）。结果是：OpenClaw 的“模型体系”里出现内部 provider，并支持 `openclaw models auth login --provider <id>` 等系统级流程。
+- **运行时（Runtime）**：每次推理/请求走 provider 实现执行：拿 token、发请求、处理超时/重试/限流、记录日志与审计。结果是：一次次调用的可靠性与可观测性。
+
+**Q4：为什么不用 exec 跑脚本就行？**
+- PoC 可以；但长期治理差：参数/返回不稳定、权限边界弱、审计困难。plugin tool / provider 方案是“可治理的一等接口”：schema 校验、可观测、可审计、可限流，配置受 manifest 约束。
+
+**Q5：Plugin 为什么要 manifest + schema？**
+- 官方目的就是：在不执行插件代码的情况下完成配置校验，减少启动与运行时事故面（把错误尽量前置到启动阶段）。
 
 ---
 
