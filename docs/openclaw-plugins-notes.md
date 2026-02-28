@@ -1,6 +1,6 @@
-# OpenClaw 扩展机制（会议演示版）：Plugins / Skills / Tools
+# OpenClaw 扩展机制（官方口径整理）：Plugins / Skills / Tools
 
-> 目标：按 **OpenClaw 官方文档口径**，在会议上把扩展机制讲清楚，并能直接用 CLI + 配置文件演示。
+> 目标：按 **OpenClaw 官方文档口径**，把扩展机制讲清楚，并能直接用 CLI + 配置文件复现关键行为。
 
 ---
 
@@ -24,11 +24,11 @@
 - **Skills**（在 manifest 里列出 `skills` 目录）
 - **Auto-reply commands**（无需调用模型，直接执行）
 
-> 会议演示建议：优先讲 tool + CLI + background service 三类，领导更容易理解“可交付的系统能力”。
+> 建议：优先理解 tool + CLI + background service 三类，最能体现“可交付的系统能力”。
 
 ---
 
-## 2. Plugin 的“加载与发现”机制（演示必讲）
+## 2. Plugin 的“加载与发现”机制
 官方的 discovery & precedence 顺序（先匹配到的 wins）：
 
 1) **Config paths**
@@ -76,12 +76,12 @@
 - `skills`：要加载的 skill 目录（相对 plugin root）
 - `uiHints`：配合 Control UI 渲染更好的配置表单（label/placeholder/sensitive）
 
-关键点（演示时一句话讲清）：
+关键点（一句话讲清）：
 - **配置校验不执行插件代码**：OpenClaw 用 manifest + JSON Schema 做预校验，避免“配置错了只能靠跑起来才发现”。
 
 ---
 
-## 4. Plugin 配置模型（官方字段名，便于现场改 JSON 演示）
+## 4. Plugin 配置模型（官方字段名，便于改 JSON 复现行为）
 官方配置形状（节选）：
 ```json5
 {
@@ -120,11 +120,11 @@ Skills 来自 3 个来源，冲突时优先级：
 - plugin 可以在 `openclaw.plugin.json` 里列出 `skills` 目录，把技能随插件一起交付。
 - 这些 plugin skills 只有在 **plugin enabled** 时加载，并且参与正常的 precedence 规则。
 
-> 演示建议：现场展示“同名 skill 在 workspace 覆盖 bundled”的行为，领导会立刻理解“可定制但可控”。
+> 建议：展示“同名 skill 在 workspace 覆盖 bundled”的行为，能很快理解“可定制但可控”。
 
 ---
 
-## 6. CLI 演示脚本（会议直接照着敲）
+## 6. CLI 复现脚本（直接照着敲）
 来自官方 `docs/cli/plugins.md`：
 
 ```bash
@@ -138,17 +138,17 @@ openclaw plugins update <id>
 openclaw plugins update --all
 ```
 
-安装/更新的官方安全口径（会议里可以当加分点）：
+安装/更新的官方安全口径（可当安全加分点）：
 - npm 安装是 **registry-only**（拒绝 git/url 规格）
 - 依赖安装使用 `npm install --ignore-scripts`（禁用生命周期脚本）
 - 建议对 npm 安装使用 `--pin` 固定版本
 
 ---
 
-## 7. 会议演示（方案 B）：用官方 Voice Call 插件演示“启动时 vs 运行时”
-> 目标：用一条链路讲清楚：
+## 7. 复现“启动时 vs 运行时”：以官方 Voice Call 插件为例
+> 目标：用一条链路把两类行为区分清楚：
 > - **启动时**：manifest/schema 驱动的严格校验（错了 gateway 起不来）
-> - **运行时**：tool call 路由到 plugin 实现，plugin 真正执行（但我们用 `provider: "log"` 避免外部依赖）
+> - **运行时**：tool call 路由到 plugin 实现，plugin 真正执行（用 `provider: "log"` 避免外部依赖）
 
 ### 7.1 准备：安装插件（一次性）
 ```bash
@@ -156,7 +156,7 @@ openclaw plugins install @openclaw/voice-call
 openclaw plugins list | rg voice-call || true
 ```
 
-### 7.2 启动时演示：故意写错配置 → 启动期硬失败
+### 7.2 启动时：故意写错配置 → 启动期硬失败
 在 `~/.openclaw/openclaw.json` 里设置（示意，字段名按官方插件配置 schema 来）：
 ```json5
 {
@@ -189,7 +189,7 @@ systemctl --user restart openclaw-gateway.service
 openclaw plugins doctor
 ```
 
-### 7.3 修正为可演示模式：provider=log（不打电话也能跑通运行时）
+### 7.3 修正为可复现模式：provider=log（不打电话也能跑通运行时）
 把配置改为：
 ```json5
 {
@@ -211,7 +211,7 @@ openclaw plugins doctor
 openclaw gateway restart
 ```
 
-### 7.4 运行时演示：触发一次“真正执行”（无外部依赖）
+### 7.4 运行时：触发一次“真正执行”（无外部依赖）
 > Voice Call 插件通常会注册：tool / CLI / RPC（具体以 `openclaw plugins info voice-call` 为准）。
 
 现场先看它到底暴露了什么：
@@ -227,7 +227,7 @@ openclaw plugins info voice-call
 
 ---
 
-## 7. 官方安全/硬化要点（演示时别讲太虚）
+## 8. 官方安全/硬化要点（别讲太虚）
 官方在 Plugins 文档里给的 hardening 关键点（可当治理卖点）：
 - `plugins.allow` 为空且发现了非 bundled 插件时，会打印 warning，提示你 pin trust。
 - OpenClaw 会对候选路径做安全检查并可能拒绝加载，例如：
@@ -239,7 +239,7 @@ openclaw plugins info voice-call
 
 ---
 
-## 8. 会议 Q&A 备答（按官方机制回答，不靠“类比”）
+## 9. 常见问题备答（按官方机制回答，不靠“类比”）
 
 **Q1：Plugin 和 Skill 最大区别？**
 - Plugin 扩展“系统能力面”（tools/commands/http handlers/services/skills shipping）；Skill 是“教 agent 如何使用 tools”的流程层。
@@ -252,7 +252,7 @@ openclaw plugins info voice-call
 
 ---
 
-## 9. 官方参考入口（你演示时可直接打开）
+## 10. 官方参考入口
 - Plugins：`docs/tools/plugin.md`
 - Plugin manifest：`docs/plugins/manifest.md`
 - CLI plugins：`docs/cli/plugins.md`
