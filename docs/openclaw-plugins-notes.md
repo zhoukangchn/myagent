@@ -1,153 +1,84 @@
-# OpenClaw 扩展机制速记：Plugin / Tool / Skill（调研整理）
+# OpenClaw 新人速通：Plugin / Skill / Tool call 到底是什么？
 
-> 目标：用一页纸搞清 OpenClaw 里“插件到底是啥”、能扩展哪些能力、什么时候该用 plugin 而不是只写 skill/定时任务。
-
-## TL;DR（一句话）
-- **Tool call**：模型调用的“函数接口”（一次调用、参数固定、返回结构化结果）。
-- **Skill**：指导模型做事的“流程/SOP/提示词+清单”，本身不新增系统能力。
-- **Plugin（插件/extension）**：**在 Gateway 进程内加载的一段扩展代码**，用来**新增系统能力面（tool surface / channel / service / CLI / provider auth / skills 打包）**。
-
-三者关系：**Plugin 可以提供 Tool/Skill；Skill 编排调用 Tool；Tool 是能力执行的最小单位。**
-
-> ✅ 核心结论（系统视角）：**skill + 脚本扩展的是“任务实现方式/工作流”，不是 OpenClaw 的“工具面（tool surface）”**；本质仍是在使用既有工具（如 `exec`）去运行外部进程。
+> 目标：5 分钟搞懂三个概念，不再混。
 
 ---
 
-## Plugin 是什么（精确定义）
-OpenClaw 的 Plugin（也叫 Extensions）是 Gateway 启动时加载的模块（TypeScript/JavaScript），它可以向 OpenClaw **注册新能力**。
+## 1) 三句口诀（背下来就行）
+- **Plugin = 工具箱 + 手**：把外部能力接进来，并且在运行时真的去执行。
+- **Skill = 说明书 + 流程**：写进提示词里，教模型怎么用工具箱、怎么兜底、输出长啥样。
+- **Tool call = 按按钮**：模型在运行时发起一次结构化函数调用。
 
-关键点：
-- **运行位置**：在 **Gateway 进程内（in-process）**，所以插件等同“受信代码”，需要治理。
-- **配置校验**：每个插件必须带 `openclaw.plugin.json`（manifest），其中包含 `configSchema`（JSON Schema）。
-  - OpenClaw 可以在**不执行插件代码**的情况下校验配置（严格验证、避免乱配导致崩溃）。
-
----
-
-## Plugin 能扩展哪些能力（分类 + 例子）
-> 粗分两大类：**渠道扩展插件（接到哪里）** + **功能增强插件（能做什么）**。
-
-### A) 渠道扩展插件（Channel plugins）
-- 目标：接入新的消息平台/通信渠道，让 OpenClaw 能收发消息、处理线程/群组等。
-- 配置位置通常在：`channels.<id>...`（而不是 `plugins.entries`）。
-
-例子（以本机 `openclaw plugins list` 能看到的为准）：
-- **discord**（已加载）
-- **telegram**（已加载）
-- **signal / whatsapp / slack / msteams / matrix / irc ...**（多数是 bundled，默认 disabled，需要启用或安装）
-
-### B) 功能增强插件（Capability / Tools / Integrations）
-- 目标：给 OpenClaw 增加新能力（新 tool、后台服务、命令、浏览器/语音/记忆等模块）。
-
-常见子类：
-1) **Agent Tools**（最常见）
-   - 例：`jira_create_ticket`、`cmdb_lookup`、`deploy_service`（你们公司集成常落在这类）。
-   - 优点：参数强约束（schema）、返回结构稳定、易做 allowlist/最小权限。
-2) **后台服务 / 监听 / Webhook（事件驱动）**
-   - 例：接收告警 webhook、消费队列、WebSocket、长期 polling。
-3) **CLI 命令**
-   - 例：增加 `openclaw xxx` 用于诊断/导入/同步/批处理。
-4) **Provider/Auth 插件（模型鉴权）**
-   - 例：把 OAuth/device login/API key 管理接进 OpenClaw。
-5) **Skills 打包分发**
-   - 插件 manifest 列出 skill 目录，把“能力 + SOP”一起交付。
-   - 注意：**Skill 也能做到安装一致**（同一份 SKILL.md/脚本分发给所有人），但它保证的是 SOP/流程一致；
-     Plugin 更像交付“稳定接口 + 最小权限 + 可运维”。
+一句话：**Plugin 提供“能做什么 + 怎么执行”，Skill 提供“怎么做得对”，Tool call 负责“这次就这么做”。**
 
 ---
 
-## 核心解答：什么时候用 Plugin，而不是只用 Skill？
-先说最关键的一句：**Skill 解决“流程怎么跑”，Plugin 解决“系统有没有这项能力 + 能不能把它做成稳定接口并受治理”。**
+## 2) 先把词儿说清楚（最少但精确）
 
-### 只用 Skill 就够（流程编排 / PoC）
-满足这些特征时，先用 skill 最划算：
-- 目标主要是“把事情做成 SOP”（比如汇总、写报告、查页面、发通知）。
-- 能完全依赖现有 tools（例如 `browser` / `web_fetch` / `message` / `exec`）。
-- 允许一定的不确定性与人工兜底（PoC 阶段）。
+### Tool / Tool call
+- **Tool**：一个给模型调用的“函数接口”（有参数 schema + 结构化返回）。
+- **Tool call**：模型对某个 tool 的一次具体调用（传参 → 得到结果）。
 
-例子：
-- 每天 18:00 汇总 GitHub issue → 写周报 → 发到 Discord（cron + skill + message）。
+### Skill
+Skill 通常包含：
+- 步骤（先问什么、再调用哪个工具、怎么判断结束）
+- 选工具/填参数的策略
+- 失败兜底（重试/换路径/追问用户）
+- 输出格式模板（要点/表格/JSON）
 
-### “必须用 Plugin” 的硬场景（从系统能力角度判断）
-> 如果你的需求是“让 OpenClaw 本身多一种能力/入口/模块”，那就是 plugin；skill 只能编排已有能力。
+关键点：**Skill 不等于能力本身**，它主要改变“模型怎么做”。
 
-1) **接入新 Channel（新聊天平台）**
-- 需要收发消息、接事件回调、线程/群语义适配 → 必须 channel plugin。
+### Plugin
+Plugin（extension）是 Gateway 启动时加载的模块，它干两件事：
+- **启动时**：把 tools 注册出来，并准备好运行环境（鉴权/HTTP client/重试限流/日志/DB 等底座）。
+- **运行时**：当模型发出 tool call，OpenClaw 把调用路由到 plugin 的工具实现 → plugin 执行 → 返回结果。
 
-2) **新增一个真正的 Tool（tool surface 增量）**
-- 你要一个带 schema 的 `xxx_tool`，让 agent 像用内置 tool 一样调用，而不是 `exec + 脚本` 绕路。
-
-3) **常驻服务 / 事件驱动入口**
-- Webhook listener、队列 consumer、WebSocket、长期 polling 等，需要 Gateway 内常驻运行。
-
-4) **替换/扩展系统级模块（例如 memory slot）**
-- 想把记忆/检索实现做成可切换插槽、影响系统行为 → 必须 plugin。
-
-5) **Provider/Auth（鉴权/登录流程接入 OpenClaw）**
-- OAuth/device login/profile 写入属于系统级能力 → 必须 plugin。
-
-> 实操路线（公司里最好用）：**先 skill PoC → 把“最核心/最危险/最不稳的系统集成段”升级成 plugin**。
+关键点：**真正“干活”发生在运行时的 tool call 之后，不是只在启动时干一票。**
 
 ---
 
-## 例子 1：voice-call（功能增强插件：电话/语音通话能力）
-`voice-call` 是一个典型“功能增强插件”：把**外呼通知/通话对话**这类能力接进 OpenClaw。
+## 3) 一条调用链把概念钉死（最重要）
 
-它能说明 plugin 的价值点：
-- 这是 OpenClaw 核心包里不会默认带的“重依赖/高风险”能力，适合做成可选插件。
-- 插件可以同时带：tool（给 agent 调用）、CLI 命令、以及 webhook/server 这类运行时组件。
+用户：**“帮我查一下上海明天会不会下雨？”**
 
----
-
-## 例子 2：memory-lancedb（功能增强插件：记忆槽位/向量检索）
-`memory-core` / `memory-lancedb` 这类属于“系统能力级”插件：它不是帮你写 SOP，而是改变 OpenClaw 的**记忆/检索实现**。
-
-它能说明 plugin 的价值点：
-- 这种能力无法靠 skill“写提示词”替代（skill 只能塞上下文，不能替换系统记忆模块）。
-- 通常通过 `plugins.slots.memory` 这类“槽位选择”来启用（互斥：同一时间只选一个 memory 插件）。
+1. OpenClaw 注入一个“天气 Skill”（告诉模型：需要 city/date、用哪个 tool、失败怎么降级、输出格式）
+2. 模型发起 tool call：`get_weather(city="上海", date="明天")`
+3. OpenClaw 把这个 tool call 路由给 **Weather plugin** 的实现
+4. Plugin 运行时请求天气 API → 返回结构化结果
+5. 模型把结果写成中文给用户（是否下雨、温度、建议带伞）
 
 ---
 
-## 例子 3：Provider/Auth 插件（模型/供应商鉴权接入）
-例如 `minimax-portal-auth` / `qwen-portal-auth` 这类插件，用来把 OAuth/device login/API key 管理接进 OpenClaw（让你能在 OpenClaw 里完成认证/写入 profile）。
+## 4) 什么时候用 Skill？什么时候必须上 Plugin？（新人决策表）
 
-它能说明 plugin 的价值点：
-- 鉴权流程是“系统级行为”，skill 无法把 OAuth 流程变成 OpenClaw 的一等公民。
-- 公司环境里这类插件也最容易纳入审计与统一管控。
+### ✅ 先写 Skill 就够（快、便宜、PoC）
+- 只是把事情写成 SOP（汇总、报告、抓网页、发通知）
+- 能完全用现有工具完成（`web_fetch`/`browser`/`message`/`exec` 等）
+- 允许一定不确定性 + 人工兜底
 
----
+### ✅ 需要 Plugin 的信号（系统能力增量）
+- 你要 **新增一个真正的一等 tool**（带 schema，可治理），而不是 `exec + 脚本` 兜一圈
+- 你要接入 **新渠道**（新聊天平台）
+- 你要 **常驻服务/事件驱动入口**（webhook/队列 consumer/poller）
+- 你要做 **系统级模块替换**（例如 memory/检索的实现）
+- 你要把 **鉴权/登录** 做成系统级能力（provider/auth）
 
-## 例子 4：Channel 插件 vs message tool（用现成 Discord 讲清楚）
-- **discord（channel 插件）**：负责“怎么把消息真正发到 Discord/怎么接收事件”。
-- **message（tool）**：agent 调用的统一 API（例如 `message.send`），背后会路由到当前 channel（这里就是 Discord）。
-
----
-
-## 官方口径（引用点，方便写公司文档）
-- 插件系统总览：`docs/tools/plugin.md` / <https://docs.openclaw.ai/tools/plugin>
-- 插件 manifest + schema（强校验来源）：`docs/plugins/manifest.md` / <https://docs.openclaw.ai/plugins/manifest>
-- 插件管理命令（install/enable/doctor）：`docs/cli/plugins.md` / <https://docs.openclaw.ai/cli/plugins>
-- Browser tool（自带浏览器能力定义）：`docs/tools/browser.md` / <https://docs.openclaw.ai/tools/browser>
-- Chrome 扩展接管机制：`docs/tools/chrome-extension.md` / <https://docs.openclaw.ai/tools/chrome-extension>
+推荐路线（最不容易踩坑）：**先 Skill 跑通 → 把最核心/最危险的外部集成那段升级成 Plugin tool。**
 
 ---
 
-## ChatGPT 对话交叉核对（Openclaw 插件介绍）
-结论：**整体方向正确，可采纳约 80-90%**，但公司文档建议统一按官方术语落地。
-
-可直接采纳：
-- Plugin 是可安装扩展模块，用来给 OpenClaw 增加核心之外能力。
-- 常见扩展面：Channel、Tools/Integrations、CLI/Gateway 扩展。
-- 工程关键项：`openclaw.plugin.json`（含 `configSchema`）+ `package.json` 的 `openclaw.extensions`。
-
-建议避免：
-- 把第三方社区案例写成官方能力（需标注“社区/第三方”）。
-- 把未确认的 hook 名称写死。
+## 5) 新手最常见的 4 个误区
+1. **把 plugin 当成“启动时配置文件”**：错，plugin 运行时会执行 tool call。
+2. **以为写了 skill 就等于新增能力**：错，skill 主要是“教模型怎么用已有能力”。
+3. **用 exec 脚本硬凑一个 tool**：PoC 可以，长期建议做成 plugin tool（有 schema/错误处理/权限边界）。
+4. **只讲概念不讲链路**：记住第 3 节那条“天气调用链”，基本就不混了。
 
 ---
 
-## 相关命令（记忆用）
+## 6) 你现在能用的命令（够用版）
 - `openclaw plugins list`
 - `openclaw plugins info <id>`
 - `openclaw plugins enable <id>` / `disable <id>`
 - `openclaw plugins doctor`
-- `openclaw plugins install <npm包|本地路径>`（装完通常要重启 Gateway）
+
+文档入口（需要再看）：<https://docs.openclaw.ai/cli/plugins>
