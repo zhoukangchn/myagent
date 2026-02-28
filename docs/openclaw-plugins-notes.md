@@ -145,6 +145,88 @@ openclaw plugins update --all
 
 ---
 
+## 7. 会议演示（方案 B）：用官方 Voice Call 插件演示“启动时 vs 运行时”
+> 目标：用一条链路讲清楚：
+> - **启动时**：manifest/schema 驱动的严格校验（错了 gateway 起不来）
+> - **运行时**：tool call 路由到 plugin 实现，plugin 真正执行（但我们用 `provider: "log"` 避免外部依赖）
+
+### 7.1 准备：安装插件（一次性）
+```bash
+openclaw plugins install @openclaw/voice-call
+openclaw plugins list | rg voice-call || true
+```
+
+### 7.2 启动时演示：故意写错配置 → 启动期硬失败
+在 `~/.openclaw/openclaw.json` 里设置（示意，字段名按官方插件配置 schema 来）：
+```json5
+{
+  plugins: {
+    entries: {
+      "voice-call": {
+        enabled: true,
+        config: {
+          provider: "not-a-real-provider" // 故意写错
+        }
+      }
+    }
+  }
+}
+```
+
+然后重启 gateway（任选其一）：
+```bash
+openclaw gateway restart
+# 或 systemd
+systemctl --user restart openclaw-gateway.service
+```
+
+预期现象（讲解点）：
+- Gateway 启动失败/Doctor 报错
+- 报错原因指向：`openclaw.plugin.json` 的 `configSchema` 校验没通过
+
+可辅助用：
+```bash
+openclaw plugins doctor
+```
+
+### 7.3 修正为可演示模式：provider=log（不打电话也能跑通运行时）
+把配置改为：
+```json5
+{
+  plugins: {
+    entries: {
+      "voice-call": {
+        enabled: true,
+        config: {
+          provider: "log"
+        }
+      }
+    }
+  }
+}
+```
+
+重启 gateway：
+```bash
+openclaw gateway restart
+```
+
+### 7.4 运行时演示：触发一次“真正执行”（无外部依赖）
+> Voice Call 插件通常会注册：tool / CLI / RPC（具体以 `openclaw plugins info voice-call` 为准）。
+
+现场先看它到底暴露了什么：
+```bash
+openclaw plugins info voice-call
+```
+
+讲解要点：
+- **此时 plugin 已加载**（启动时通过 schema 校验）
+- 当你触发对应的命令/工具时，才发生运行时执行（即使 provider=log，也会走完整 dispatch 路径）
+
+> 备注：如果你要 100% 可复制的“触发方式”，我们需要你本机 `openclaw plugins info voice-call` 的输出（里面会列出它注册的 CLI command 名称，比如 `openclaw voicecall status` 之类）。
+
+---
+
 ## 7. 官方安全/硬化要点（演示时别讲太虚）
 官方在 Plugins 文档里给的 hardening 关键点（可当治理卖点）：
 - `plugins.allow` 为空且发现了非 bundled 插件时，会打印 warning，提示你 pin trust。
