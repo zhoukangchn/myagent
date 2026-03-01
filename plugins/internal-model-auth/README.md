@@ -62,6 +62,21 @@ openclaw models auth login --provider internal-model --method header-body --set-
 3. Body Patch JSON（例如 `{"temperature":0.2,"top_p":0.9}`）
 4. 模型 ID（逗号分隔，例如 `model-a,model-b`）
 
+## 模型 ID 是什么
+
+- 这里填写的 `模型 ID`，就是请求体里的 `model` 字段值。
+- 可以理解为和 OpenAI 接口里的 `model` 参数一致。
+- 登录时填写的模型会注册为 OpenClaw 可选模型，格式通常是：`internal-model/<model-id>`。
+
+## 模型清单（示例）
+
+以下是通用示例，请替换为你公司网关真实支持的模型 ID：
+
+- `chat-model`
+- `chat-model-32k`
+- `reasoning-model`
+- `vision-model`
+
 ## 使用与验证
 
 安装并登录后，默认模型会设置为 `internal-model/<第一个模型ID>`。
@@ -72,6 +87,16 @@ openclaw models auth login --provider internal-model --method header-body --set-
 openclaw plugins info internal-model-auth
 openclaw models status
 ```
+
+## 快速切换模型
+
+- 若希望切换模型，重新执行登录命令并把目标模型放在第一个：
+
+```bash
+openclaw models auth login --provider internal-model --method header-body --set-default
+```
+
+- 例如你输入 `reasoning-model,chat-model`，默认模型会变成 `internal-model/reasoning-model`。
 
 ## 合并与安全规则
 
