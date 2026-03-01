@@ -1,0 +1,33 @@
+{
+  "id": "internal-model-auth",
+  "name": "Internal Model Auth Relay",
+  "description": "Provider plugin for internal model gateways with custom header/body injection",
+  "version": "0.1.0",
+  "providers": ["internal-model"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "relayPort": {
+        "type": "number",
+        "default": 19321,
+        "description": "Local relay listen port"
+      },
+      "tlsInsecure": {
+        "type": "boolean",
+        "default": false,
+        "description": "Disable TLS cert verification for upstream requests (testing only)"
+      },
+      "requestTimeoutMs": {
+        "type": "number",
+        "default": 120000,
+        "description": "Upstream request timeout in milliseconds"
+      },
+      "maxBodyBytes": {
+        "type": "number",
+        "default": 4194304,
+        "description": "Maximum incoming request body size in bytes"
+      }
+    }
+  }
+}
