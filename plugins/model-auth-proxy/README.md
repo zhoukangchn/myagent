@@ -1,27 +1,25 @@
 # model-auth-proxy
 
-OpenClaw plugin for provider `internal-model`, using a local relay to forward requests to an OpenAI-compatible upstream.
+OpenClaw provider plugin for internal model gateways requiring API key and custom headers.
 
-## What changed
+## What it does
 
-This plugin now uses **provider headers only** (set during login) for:
-- `upstreamUrl`
-- `apiKey`
-- `header1`
-- `header2`
-
-`plugin.config` is no longer used for those fields. It only keeps:
-- `tlsInsecure` (optional, testing only)
+- Registers provider: `internal-model`
+- Uses direct upstream connection (no local relay)
+- Stores API key directly as provider `apiKey`
+- Sends API key in Authorization header (`authHeader: true`)
+- Writes optional custom headers to `provider.headers`
 
 ## Install
 
 ```bash
-cd ~/myagent
 openclaw plugins install "$(pwd)/plugins/model-auth-proxy"
 openclaw plugins enable model-auth-proxy
 ```
 
-## Plugin config (`~/.openclaw/openclaw.json`)
+## Optional plugin config
+
+Edit `~/.openclaw/openclaw.json`:
 
 ```json5
 {
@@ -38,57 +36,46 @@ openclaw plugins enable model-auth-proxy
 }
 ```
 
-## Login flow (required)
+`tlsInsecure: true` sets `NODE_TLS_REJECT_UNAUTHORIZED=0` for the running OpenClaw process. Use only for testing.
 
-Run:
+## Login flow
 
 ```bash
-openclaw models auth login --provider internal-model --method api-key-relay --set-default
+openclaw models auth login --provider internal-model --method api-key-headers --set-default
 ```
 
-During login, you will be prompted for:
-- Upstream OpenAI-compatible base URL (`upstreamUrl`)
-- Upstream API key (`apiKey`)
-- Optional custom header #1 (`header1`, format: `name:value`)
-- Optional custom header #2 (`header2`, format: `name:value`)
-- Model IDs (comma-separated)
+Prompts:
 
-The plugin writes these values into `models.providers.internal-model.headers` as relay control headers.
+1. Upstream base URL (required)
+2. API key (required)
+3. Custom headers JSON (optional)
+4. Model IDs (comma-separated)
 
-## Relay control headers (auto-generated)
+## Generated provider config shape
 
-After login, generated provider config looks like:
-
-```json5
+```json
 {
-  models: {
-    providers: {
+  "models": {
+    "providers": {
       "internal-model": {
-        "baseUrl": "http://127.0.0.1:19429/v1",
-        "apiKey": "model-auth-proxy",
+        "baseUrl": "https://gateway.company.com/v1",
+        "apiKey": "YOUR_API_KEY",
         "api": "openai-completions",
-        "authHeader": false,
+        "authHeader": true,
         "headers": {
-          "x-openclaw-upstream-url": "https://gateway.company.com/v1",
-          "x-openclaw-upstream-api-key": "YOUR_API_KEY",
-          "x-openclaw-upstream-custom-headers": "{\"x-tenant-id\":\"team-a\",\"x-project\":\"prod\"}"
-        }
+          "x-tenant-id": "team-a",
+          "x-project": "prod"
+        },
+        "models": [
+          {
+            "id": "gpt-4o-mini",
+            "name": "gpt-4o-mini",
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
       }
     }
   }
 }
-```
-
-Do not manually move these values into `plugin.config`; they are expected in provider headers.
-
-## TLS note
-
-- Set `tlsInsecure=true` only for isolated test environments with self-signed certs.
-- Keep `tlsInsecure=false` in production.
-
-## Verify
-
-```bash
-openclaw plugins info model-auth-proxy
-openclaw models status
 ```

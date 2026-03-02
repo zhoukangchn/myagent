@@ -1,7 +1,7 @@
 {
   "id": "model-auth-proxy",
-  "name": "Internal Model Auth Proxy",
-  "description": "Relay internal-model provider requests to an OpenAI-compatible upstream with API key and custom headers",
+  "name": "Model Auth Proxy",
+  "description": "Direct provider auth plugin for internal model gateways using API key and custom headers",
   "version": "0.1.0",
   "providers": ["internal-model"],
   "configSchema": {
@@ -11,7 +11,7 @@
       "tlsInsecure": {
         "type": "boolean",
         "default": false,
-        "description": "Disable TLS certificate verification for upstream requests (testing only)"
+        "description": "Disable TLS cert verification for upstream requests (testing only)"
       }
     }
   }
