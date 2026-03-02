@@ -1,0 +1,15 @@
+{
+  "name": "internal-model-auth-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw plugin: internal-model relay with API key, custom headers, and optional insecure TLS",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "index.ts"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

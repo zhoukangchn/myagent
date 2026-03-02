@@ -1,0 +1,16 @@
+{
+  plugins: {
+    entries: {
+      "model-auth-proxy": {
+        enabled: true,
+        config: {
+          upstreamUrl: "https://gateway.company.com/v1",
+          apiKey: "YOUR_API_KEY_HERE",
+          header1: { name: "x-tenant-id", value: "team-a" },
+          header2: { name: "x-project", value: "prod" },
+          tlsInsecure: false
+        }
+      }
+    }
+  }
+}
