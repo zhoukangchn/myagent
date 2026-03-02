@@ -146,9 +146,9 @@ const plugin = {
                 {
                   profileId: `${PROVIDER_ID}:default`,
                   credential: {
-                    type: "token",
+                    type: "api_key",
                     provider: PROVIDER_ID,
-                    token: apiKey,
+                    key: apiKey,
                   },
                 },
               ],
