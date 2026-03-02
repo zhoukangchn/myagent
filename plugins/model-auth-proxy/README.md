@@ -117,3 +117,80 @@ openclaw models status
 - **400**：检查 `upstreamUrl` 格式，需以 `/v1` 结尾
 - **TLS 报错**：检查证书链；仅测试环境可临时开启 `tlsInsecure=true`
 - **连接拒绝**：确认上游网关可达；检查防火墙/网络策略
+
+## 如何使用已登录的模型
+
+登录并配置完成后，模型会自动注册到 OpenClaw。以下是使用方式：
+
+### 1. 检查已注册的模型
+
+```bash
+openclaw models status
+```
+
+输出示例：
+```
+Provider: internal-model
+├── internal-model/gpt-4o-mini (default)
+└── internal-model/gpt-4.1-mini
+```
+
+### 2. 设置默认模型
+
+编辑 `~/.openclaw/openclaw.json`，在 `agents.defaults.models` 中指定：
+
+```json5
+{
+  agents: {
+    defaults: {
+      models: {
+        "internal-model/gpt-4o-mini": {}
+      }
+    }
+  }
+}
+```
+
+或者使用命令：
+
+```bash
+openclaw configure --section agents.defaults.models --set '{"internal-model/gpt-4o-mini": {}}'
+```
+
+### 3. 临时指定模型
+
+在对话中可以使用 `/model` 命令切换：
+
+```
+/model internal-model/gpt-4.1-mini
+```
+
+### 4. API 调用示例
+
+插件会通过本地 relay 转发请求，格式为 OpenAI 兼容：
+
+```bash
+# 测试连通性
+curl -X POST http://127.0.0.1:19429/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer internal-model-auth-proxy" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+注意：实际请求会通过 OpenClaw 自动注入正确的 upstreamUrl 和 apiKey，无需手动指定。
+
+## 架构说明
+
+```
+用户请求 → OpenClaw → local relay (127.0.0.1:19429) → upstream gateway
+                                    ↑
+                          注入 Authorization Bearer
+                          注入 header1 / header2
+```
+
+- **本地 relay 端口**：19429
+- **请求路径**：原样转发 `/v1/*`
+- **认证方式**：由插件在请求时动态注入 `Authorization: Bearer <apiKey>`
