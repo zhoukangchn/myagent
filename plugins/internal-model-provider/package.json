@@ -1,8 +1,8 @@
 {
-  "name": "model-auth-proxy",
+  "name": "internal-model-provider",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenClaw plugin: direct internal model auth with API key and custom headers",
+  "description": "OpenClaw plugin: custom internal model provider with API key auth",
   "type": "module",
   "openclaw": {
     "extensions": ["index.ts"]
