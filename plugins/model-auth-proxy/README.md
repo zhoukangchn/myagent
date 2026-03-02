@@ -194,3 +194,112 @@ curl -X POST http://127.0.0.1:19429/v1/chat/completions \
 - **本地 relay 端口**：19429
 - **请求路径**：原样转发 `/v1/*`
 - **认证方式**：由插件在请求时动态注入 `Authorization: Bearer <apiKey>`
+
+## 完整配置示例（登录后）
+
+执行 `openclaw models auth login` 后，插件会自动在 `models.providers` 中添加配置。**你无需手动编辑这部分**，但了解最终结构有助于调试。
+
+### 登录后的 models.providers（自动生成）
+
+```json5
+{
+  models: {
+    providers: {
+      "internal-model": {
+        "baseUrl": "http://127.0.0.1:19429/v1",
+        "apiKey": "internal-model-auth-proxy",
+        "api": "openai-completions",
+        "authHeader": false,
+        "headers": {
+          "x-openclaw-upstream-url": "https://gateway.company.com/v1",
+          "x-openclaw-upstream-api-key": "YOUR_API_KEY",
+          "x-openclaw-upstream-custom-headers": "{\"x-tenant-id\":\"team-a\",\"x-project\":\"prod\"}"
+        },
+        "models": [
+          {
+            "id": "gpt-4o-mini",
+            "name": "gpt-4o-mini",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gpt-4.1-mini",
+            "name": "gpt-4.1-mini",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+### 登录后的 agents.defaults.models（自动生成）
+
+```json5
+{
+  agents: {
+    defaults: {
+      models: {
+        "internal-model/gpt-4o-mini": {},
+        "internal-model/gpt-4.1-mini": {}
+      }
+    }
+  }
+}
+```
+
+### 完整 openclaw.json 示例
+
+```json5
+{
+  plugins: {
+    entries: {
+      "model-auth-proxy": {
+        "enabled": true,
+        "config": {
+          "upstreamUrl": "https://gateway.company.com/v1",
+          "apiKey": "sk-xxxxxxxxxxxxxxxx",
+          "header1": { "name": "x-tenant-id", "value": "team-a" },
+          "header2": { "name": "x-project", "value": "prod" },
+          "tlsInsecure": false
+        }
+      }
+    }
+  },
+  models: {
+    providers: {
+      "internal-model": {
+        "baseUrl": "http://127.0.0.1:19429/v1",
+        "apiKey": "internal-model-auth-proxy",
+        "api": "openai-completions",
+        "authHeader": false,
+        "headers": {
+          "x-openclaw-upstream-url": "https://gateway.company.com/v1",
+          "x-openclaw-upstream-api-key": "sk-xxxxxxxxxxxxxxxx",
+          "x-openclaw-upstream-custom-headers": "{\"x-tenant-id\":\"team-a\",\"x-project\":\"prod\"}"
+        },
+        "models": [
+          { "id": "gpt-4o-mini", "name": "gpt-4o-mini", "reasoning": false, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "contextWindow": 128000, "maxTokens": 8192 }
+        ]
+      }
+    }
+  },
+  agents: {
+    defaults: {
+      models: {
+        "internal-model/gpt-4o-mini": {}
+      }
+    }
+  }
+}
+```
+
+> ⚠️ **注意**：上面的 `models.providers` 和 `agents.defaults.models` 是登录后**自动生成**的，你只需要配置 `plugins.entries.model-auth-proxy.config` 部分。
