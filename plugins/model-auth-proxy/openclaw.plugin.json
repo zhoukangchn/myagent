@@ -1,5 +1,5 @@
 {
-  "id": "internal-model-auth-proxy",
+  "id": "model-auth-proxy",
   "name": "Internal Model Auth Proxy",
   "description": "Relay internal-model provider requests to an OpenAI-compatible upstream with API key and custom headers",
   "version": "0.1.0",

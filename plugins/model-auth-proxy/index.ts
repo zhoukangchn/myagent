@@ -7,13 +7,13 @@ import type {
   ProviderAuthResult,
 } from "openclaw/plugin-sdk";
 
-const PLUGIN_ID = "internal-model-auth-proxy";
+const PLUGIN_ID = "model-auth-proxy";
 const PROVIDER_ID = "internal-model";
 const PROVIDER_LABEL = "Internal Model";
 const RELAY_PORT = 19429;
 const REQUEST_TIMEOUT_MS = 120_000;
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
-const PLACEHOLDER_API_KEY = "internal-model-auth-proxy";
+const PLACEHOLDER_API_KEY = "model-auth-proxy";
 const DEFAULT_MODEL_IDS = "internal-chat";
 
 const CONTROL_HEADER_UPSTREAM_URL = "x-openclaw-upstream-url";

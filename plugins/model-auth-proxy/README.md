@@ -114,7 +114,7 @@ openclaw models status
 ## 常见问题
 
 - **401/403**：通常是 `apiKey` 配置错误或 token 失效
-- **400**：检查 `upstreamUrl` 格式，需以 `/v1` 结尾
+- **400**：检查 `upstreamUrl` 是否可达且格式正确（插件会自动补齐 `/v1`）
 - **TLS 报错**：检查证书链；仅测试环境可临时开启 `tlsInsecure=true`
 - **连接拒绝**：确认上游网关可达；检查防火墙/网络策略
 
@@ -167,20 +167,24 @@ openclaw configure --section agents.defaults.models --set '{"internal-model/gpt-
 
 ### 4. API 调用示例
 
-插件会通过本地 relay 转发请求，格式为 OpenAI 兼容：
+建议通过 OpenClaw 正常调用模型（`internal-model/<model-id>`）。  
+若要直接调试 relay，需要带上控制头（通常由 OpenClaw 自动注入）：
 
 ```bash
-# 测试连通性
+# 仅用于 relay 直连调试
 curl -X POST http://127.0.0.1:19429/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer internal-model-auth-proxy" \
+  -H "x-openclaw-upstream-url: https://gateway.company.com/v1" \
+  -H "x-openclaw-upstream-api-key: YOUR_API_KEY" \
+  -H "x-openclaw-upstream-custom-headers: {\"x-tenant-id\":\"team-a\",\"x-project\":\"prod\"}" \
+  -H "Authorization: Bearer model-auth-proxy" \
   -d '{
     "model": "gpt-4o-mini",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
 
-注意：实际请求会通过 OpenClaw 自动注入正确的 upstreamUrl 和 apiKey，无需手动指定。
+注意：正常使用时，上述控制头由 OpenClaw 自动注入，无需手动指定。
 
 ## 架构说明
 
@@ -207,7 +211,7 @@ curl -X POST http://127.0.0.1:19429/v1/chat/completions \
     providers: {
       "internal-model": {
         "baseUrl": "http://127.0.0.1:19429/v1",
-        "apiKey": "internal-model-auth-proxy",
+        "apiKey": "model-auth-proxy",
         "api": "openai-completions",
         "authHeader": false,
         "headers": {
@@ -278,7 +282,7 @@ curl -X POST http://127.0.0.1:19429/v1/chat/completions \
     providers: {
       "internal-model": {
         "baseUrl": "http://127.0.0.1:19429/v1",
-        "apiKey": "internal-model-auth-proxy",
+        "apiKey": "model-auth-proxy",
         "api": "openai-completions",
         "authHeader": false,
         "headers": {
