@@ -26,10 +26,6 @@ type HeaderConfig = {
 };
 
 type PluginConfig = {
-  upstreamUrl?: string;
-  apiKey?: string;
-  header1?: HeaderConfig | null;
-  header2?: HeaderConfig | null;
   tlsInsecure?: boolean;
 };
 
@@ -59,15 +55,15 @@ function parseModelIds(input: string): string[] {
   );
 }
 
-function parseHeaderConfig(raw: unknown, label: string): HeaderConfig | null {
-  if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`${label} must be an object with name/value`);
-  }
-  const name = String((raw as Record<string, unknown>).name ?? "").trim();
-  const value = String((raw as Record<string, unknown>).value ?? "");
-  if (!name) throw new Error(`${label}.name is required`);
-  return { name, value };
+function parseHeaderPrompt(value: string, label: string): HeaderConfig | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const idx = trimmed.indexOf(":");
+  if (idx <= 0) throw new Error(`${label} must use name:value format`);
+  const name = trimmed.slice(0, idx).trim();
+  const headerValue = trimmed.slice(idx + 1).trim();
+  if (!name) throw new Error(`${label} header name is required`);
+  return { name, value: headerValue };
 }
 
 function parseObjectJson(input: string, label: string): Record<string, string> {
@@ -191,7 +187,7 @@ function createRelayService(params: {
           if (!upstreamUrlRaw || !upstreamApiKey) {
             writeJson(res, 400, {
               error:
-                "Missing relay control headers. Ensure provider auth is configured and plugin config has upstreamUrl/apiKey.",
+                "Missing relay control headers. Run auth login for this provider to configure upstream settings.",
             });
             return;
           }
@@ -281,19 +277,54 @@ const plugin = {
         {
           id: "api-key-relay",
           label: "API key relay",
-          hint: "Use plugin config for upstreamUrl/apiKey and optional extra headers",
+          hint: "Prompt for upstream URL, API key, and optional headers during login",
           kind: "custom",
           run: async (ctx: ProviderAuthContext): Promise<ProviderAuthResult> => {
-            const upstreamUrl = normalizeBaseUrl(pluginConfig?.upstreamUrl ?? "");
-            const apiKey = String(pluginConfig?.apiKey ?? "").trim();
-            if (!apiKey) {
-              throw new Error(
-                `Missing plugins.entries.${PLUGIN_ID}.config.apiKey in ~/.openclaw/openclaw.json`,
-              );
-            }
+            const upstreamUrlInput = await ctx.prompter.text({
+              message: "Upstream OpenAI-compatible base URL",
+              initialValue: "https://gateway.company.com/v1",
+              validate: (value: string) => {
+                try {
+                  normalizeBaseUrl(value);
+                  return undefined;
+                } catch (err) {
+                  return err instanceof Error ? err.message : "Invalid upstream URL";
+                }
+              },
+            });
+            const apiKeyInput = await ctx.prompter.text({
+              message: "Upstream API key (Bearer token)",
+              validate: (value: string) => (value.trim() ? undefined : "API key is required"),
+            });
+            const header1Input = await ctx.prompter.text({
+              message: "Optional custom header #1 (name:value, leave empty to skip)",
+              initialValue: "",
+              validate: (value: string) => {
+                try {
+                  parseHeaderPrompt(value, "header1");
+                  return undefined;
+                } catch (err) {
+                  return err instanceof Error ? err.message : "Invalid header1 format";
+                }
+              },
+            });
+            const header2Input = await ctx.prompter.text({
+              message: "Optional custom header #2 (name:value, leave empty to skip)",
+              initialValue: "",
+              validate: (value: string) => {
+                try {
+                  parseHeaderPrompt(value, "header2");
+                  return undefined;
+                } catch (err) {
+                  return err instanceof Error ? err.message : "Invalid header2 format";
+                }
+              },
+            });
 
-            const header1 = parseHeaderConfig(pluginConfig?.header1, "header1");
-            const header2 = parseHeaderConfig(pluginConfig?.header2, "header2");
+            const upstreamUrl = normalizeBaseUrl(upstreamUrlInput);
+            const apiKey = apiKeyInput.trim();
+            const header1 = parseHeaderPrompt(header1Input, "header1");
+            const header2 = parseHeaderPrompt(header2Input, "header2");
 
             const customHeaders: Record<string, string> = {};
             if (header1) customHeaders[header1.name] = header1.value;
@@ -346,8 +377,8 @@ const plugin = {
               defaultModel: `${PROVIDER_ID}/${modelIds[0]}`,
               notes: [
                 `Relay endpoint: ${relayBaseUrl}`,
-                "Upstream Authorization is injected as Bearer token from plugin config apiKey.",
-                "header1/header2 are injected on every upstream request when configured.",
+                "Upstream Authorization is injected as Bearer token from provider login headers.",
+                "Optional header1/header2 are injected on every upstream request when configured.",
                 "Set tlsInsecure=true only for test environments with self-signed certs.",
               ],
             };

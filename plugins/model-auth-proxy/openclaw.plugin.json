@@ -7,38 +7,7 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["upstreamUrl", "apiKey"],
     "properties": {
-      "upstreamUrl": {
-        "type": "string",
-        "description": "Upstream OpenAI-compatible base URL, e.g. https://gateway.company.com/v1"
-      },
-      "apiKey": {
-        "type": "string",
-        "description": "Bearer token used for upstream Authorization header"
-      },
-      "header1": {
-        "type": ["object", "null"],
-        "default": null,
-        "additionalProperties": false,
-        "properties": {
-          "name": { "type": "string" },
-          "value": { "type": "string" }
-        },
-        "required": ["name", "value"],
-        "description": "Optional custom upstream header #1"
-      },
-      "header2": {
-        "type": ["object", "null"],
-        "default": null,
-        "additionalProperties": false,
-        "properties": {
-          "name": { "type": "string" },
-          "value": { "type": "string" }
-        },
-        "required": ["name", "value"],
-        "description": "Optional custom upstream header #2"
-      },
       "tlsInsecure": {
         "type": "boolean",
         "default": false,
