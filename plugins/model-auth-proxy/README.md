@@ -10,11 +10,19 @@ OpenClaw provider plugin for internal model gateways requiring API key and custo
 - Sends API key in Authorization header (`authHeader: true`)
 - Writes optional custom headers to `provider.headers`
 
-## Install
+## Install (fresh)
 
 ```bash
+# If you have old plugins, uninstall them first
+openclaw plugins uninstall internal-model-auth
+openclaw plugins uninstall model-auth-proxy
+
+# Install new plugin
 openclaw plugins install "$(pwd)/plugins/model-auth-proxy"
 openclaw plugins enable model-auth-proxy
+
+# Restart gateway
+openclaw gateway restart
 ```
 
 ## Optional plugin config
