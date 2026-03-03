@@ -2,6 +2,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { BridgeClient } from "./src/bridge-client.js";
 
 const PLUGIN_ID = "ts-openclaw-channel";
+const CHANNEL_ID = "sse_bridge";
 const REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
 type InboundUserMessage = {
@@ -11,27 +12,29 @@ type InboundUserMessage = {
   payload?: Record<string, unknown>;
 };
 
-type ActiveTurn = {
-  requestId: string;
-  sessionKey: string;
-  runId?: string;
-  done: boolean;
-  timeout: NodeJS.Timeout;
+type InboundSystemEvent = {
+  type: "system.event";
+  request_id?: string;
+  session_key: string;
+  payload?: Record<string, unknown>;
 };
 
-const DONE_WORDS = new Set([
-  "done",
-  "complete",
-  "completed",
-  "finish",
-  "finished",
-  "stop",
-  "stopped",
-  "end",
-  "ended",
-  "success",
-  "succeeded",
-]);
+type AgentCliResult = {
+  status?: string;
+  result?: {
+    payloads?: Array<{ text?: string | null }>;
+    meta?: {
+      durationMs?: number;
+      agentMeta?: {
+        usage?: {
+          input?: number;
+          output?: number;
+          total?: number;
+        };
+      };
+    };
+  };
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -42,24 +45,101 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function collectText(data: Record<string, unknown>): string {
-  const keys = ["text", "delta", "content", "chunk", "message"];
-  for (const key of keys) {
-    const raw = data[key];
-    if (typeof raw === "string" && raw) return raw;
-  }
-  const nested = asRecord(data.payload);
-  if (nested) return collectText(nested);
-  return "";
+function toInboundUserMessage(msg: unknown): InboundUserMessage | null {
+  const record = asRecord(msg);
+  if (!record || record.type !== "user.message") return null;
+  const requestId = asString(record.request_id);
+  if (!requestId) return null;
+  return {
+    type: "user.message",
+    request_id: requestId,
+    session_key: asString(record.session_key) ?? undefined,
+    payload: asRecord(record.payload) ?? undefined,
+  };
 }
 
-function lifecycleDone(data: Record<string, unknown>): boolean {
-  const keys = ["type", "event", "status", "state", "phase", "action"];
-  for (const key of keys) {
-    const raw = asString(data[key]);
-    if (raw && DONE_WORDS.has(raw.toLowerCase())) return true;
+function toInboundSystemEvent(msg: unknown): InboundSystemEvent | null {
+  const record = asRecord(msg);
+  if (!record || record.type !== "system.event") return null;
+  const sessionKey = asString(record.session_key);
+  if (!sessionKey) return null;
+  return {
+    type: "system.event",
+    request_id: asString(record.request_id) ?? undefined,
+    session_key: sessionKey,
+    payload: asRecord(record.payload) ?? undefined,
+  };
+}
+
+function normalizeSessionId(sessionKey: string): string {
+  const id = sessionKey.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return id.length > 120 ? id.slice(0, 120) : id;
+}
+
+function toChatThread(sessionKey: string): { chatId: string; threadId: string } {
+  const idx = sessionKey.indexOf(":");
+  if (idx <= 0) return { chatId: sessionKey, threadId: "root" };
+  return {
+    chatId: sessionKey.slice(0, idx),
+    threadId: sessionKey.slice(idx + 1) || "root",
+  };
+}
+
+async function postChannelMessage(params: {
+  url: string;
+  to: string;
+  text: string;
+  accountId?: string | null;
+}) {
+  const { chatId, threadId } = toChatThread(params.to);
+  const payload = {
+    chat_id: chatId,
+    thread_id: threadId,
+    message_id: `oc-${Date.now()}`,
+    role: "assistant",
+    content: params.text,
+    metadata: {
+      source: "openclaw-cron-delivery",
+      account_id: params.accountId ?? "default",
+    },
+  };
+
+  const resp = await fetch(params.url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => "");
+    throw new Error(`channel post failed: ${resp.status} ${detail.slice(0, 200)}`);
   }
-  return false;
+}
+
+function parseJsonFromStdout(stdout: string): AgentCliResult | null {
+  const text = stdout.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as AgentCliResult;
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    try {
+      return JSON.parse(text.slice(start, end + 1)) as AgentCliResult;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractReplyText(result: AgentCliResult | null): string {
+  const payloads = result?.result?.payloads;
+  if (!Array.isArray(payloads)) return "";
+  return payloads
+    .map((p) => (typeof p?.text === "string" ? p.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
 const plugin = {
@@ -68,62 +148,81 @@ const plugin = {
     const wsUrl = process.env.BRIDGE_WS_URL ?? "ws://127.0.0.1:8010/v1/ws/openclaw";
     const secret = process.env.OPENCLAW_SHARED_SECRET ?? "dev-openclaw-secret";
     const openclawId = process.env.OPENCLAW_ID ?? "openclaw-local";
+    const bridgeAgentId = process.env.BRIDGE_OPENCLAW_AGENT_ID ?? "main";
+    const channelPostUrl = process.env.SSE_CHANNEL_POST_URL ?? "";
+    const defaultTo = process.env.SSE_CHANNEL_DEFAULT_TO ?? "";
 
     const client = new BridgeClient();
-    const turnsByRequestId = new Map<string, ActiveTurn>();
-    const turnsBySessionKey = new Map<string, ActiveTurn>();
 
-    const clearTurn = (turn: ActiveTurn) => {
-      clearTimeout(turn.timeout);
-      turnsByRequestId.delete(turn.requestId);
-      if (turn.runId) turnsByRequestId.delete(turn.runId);
-      if (turnsBySessionKey.get(turn.sessionKey)?.requestId === turn.requestId) {
-        turnsBySessionKey.delete(turn.sessionKey);
-      }
-    };
+    api.registerChannel({
+      id: CHANNEL_ID,
+      meta: {
+        id: CHANNEL_ID,
+        label: "SSE Bridge",
+        selectionLabel: "SSE Bridge",
+        docsPath: "/channels/custom/sse-bridge",
+        blurb: "Custom channel for OpenClaw cron delivery over HTTP POST",
+      },
+      capabilities: {
+        chatTypes: ["direct"],
+        media: false,
+      },
+      config: {
+        listAccountIds: () => ["default"],
+        resolveAccount: () => ({ accountId: "default" }),
+        defaultAccountId: () => "default",
+      },
+      outbound: {
+        deliveryMode: "direct",
+        resolveTarget: ({ to }: { to?: string }) => {
+          const target = (typeof to === "string" && to.trim()) ? to.trim() : defaultTo.trim();
+          if (!target) return { ok: false, error: new Error("missing target `to` for sse_bridge") };
+          return { ok: true, to: target };
+        },
+        sendText: async (ctx: { to: string; text: string; accountId?: string | null }) => {
+          if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
+          await postChannelMessage({
+            url: channelPostUrl,
+            to: ctx.to,
+            text: ctx.text,
+            accountId: ctx.accountId,
+          });
+          return {
+            channel: CHANNEL_ID,
+            messageId: `sse-${Date.now()}`,
+            chatId: ctx.to,
+          };
+        },
+        sendMedia: async (ctx: {
+          to: string;
+          text: string;
+          mediaUrl?: string | null;
+          accountId?: string | null;
+        }) => {
+          if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
+          const mediaSuffix = ctx.mediaUrl ? `\n${ctx.mediaUrl}` : "";
+          await postChannelMessage({
+            url: channelPostUrl,
+            to: ctx.to,
+            text: `${ctx.text ?? ""}${mediaSuffix}`.trim(),
+            accountId: ctx.accountId,
+          });
+          return {
+            channel: CHANNEL_ID,
+            messageId: `sse-${Date.now()}`,
+            chatId: ctx.to,
+          };
+        },
+      },
+    });
 
-    const finishTurn = (turn: ActiveTurn, payload: Record<string, unknown>) => {
-      if (turn.done) return;
-      turn.done = true;
-      client.send({
-        type: "assistant.done",
-        request_id: turn.requestId,
-        session_key: turn.sessionKey,
-        payload,
-      });
-      clearTurn(turn);
-    };
-
-    const failTurn = (turn: ActiveTurn, code: string, message: string) => {
-      if (turn.done) return;
-      turn.done = true;
+    const sendError = (requestId: string, sessionKey: string, code: string, message: string) => {
       client.send({
         type: "assistant.error",
-        request_id: turn.requestId,
-        session_key: turn.sessionKey,
+        request_id: requestId,
+        session_key: sessionKey,
         payload: { code, message },
       });
-      clearTurn(turn);
-    };
-
-    const bindTurnBySession = (sessionKey: string): ActiveTurn | null => {
-      const bySession = turnsBySessionKey.get(sessionKey);
-      if (bySession) return bySession;
-      return null;
-    };
-
-    const toInboundUserMessage = (msg: unknown): InboundUserMessage | null => {
-      const record = asRecord(msg);
-      if (!record) return null;
-      if (record.type !== "user.message") return null;
-      const requestId = asString(record.request_id);
-      if (!requestId) return null;
-      return {
-        type: "user.message",
-        request_id: requestId,
-        session_key: asString(record.session_key) ?? undefined,
-        payload: asRecord(record.payload) ?? undefined,
-      };
     };
 
     client.connect({
@@ -134,100 +233,125 @@ const plugin = {
         api.logger.info?.(`[${PLUGIN_ID}] bridge status=${status}`);
       },
       onMessage: (msg) => {
+        const systemEvent = toInboundSystemEvent(msg);
+        if (systemEvent) {
+          const text = asString(systemEvent.payload?.text) ?? "";
+          if (!text) {
+            if (systemEvent.request_id) {
+              sendError(
+                systemEvent.request_id,
+                systemEvent.session_key,
+                "bad_request",
+                "payload.text is required for system.event",
+              );
+            }
+            return;
+          }
+
+          const contextKey =
+            asString(systemEvent.payload?.context_key) ??
+            `bridge:${systemEvent.request_id ?? Date.now().toString()}`;
+          const wakeReason = asString(systemEvent.payload?.reason) ?? "bridge:system-event";
+          const upstreamSessionKey = `agent:${bridgeAgentId}:${systemEvent.session_key}`;
+          const ok = api.runtime.system.enqueueSystemEvent(text, {
+            sessionKey: upstreamSessionKey,
+            contextKey,
+          });
+          if (!ok) {
+            if (systemEvent.request_id) {
+              sendError(
+                systemEvent.request_id,
+                systemEvent.session_key,
+                "enqueue_failed",
+                "failed to enqueue system event",
+              );
+            }
+            return;
+          }
+
+          api.runtime.system.requestHeartbeatNow({
+            sessionKey: upstreamSessionKey,
+            reason: wakeReason,
+            agentId: bridgeAgentId,
+          });
+
+          if (systemEvent.request_id) {
+            client.send({
+              type: "assistant.done",
+              request_id: systemEvent.request_id,
+              session_key: systemEvent.session_key,
+              payload: {
+                accepted: true,
+                mode: "heartbeat",
+              },
+            });
+          }
+          return;
+        }
+
         const inbound = toInboundUserMessage(msg);
         if (!inbound) return;
+
         const sessionKey = inbound.session_key ?? inbound.request_id;
         const userText = asString(inbound.payload?.text) ?? "";
         if (!userText) {
+          sendError(inbound.request_id, sessionKey, "bad_request", "payload.text is required");
+          return;
+        }
+
+        const sessionId = normalizeSessionId(`${bridgeAgentId}_${sessionKey}`);
+
+        void (async () => {
+          const cmd = [
+            "openclaw",
+            "agent",
+            "--agent",
+            bridgeAgentId,
+            "--session-id",
+            sessionId,
+            "--message",
+            userText,
+            "--json",
+          ];
+
+          const result = await api.runtime.system.runCommandWithTimeout(cmd, {
+            timeoutMs: REQUEST_TIMEOUT_MS,
+          });
+
+          if (result.code !== 0) {
+            const detail = (result.stderr || result.stdout || "openclaw agent failed").trim();
+            sendError(inbound.request_id, sessionKey, "upstream_error", detail.slice(0, 800));
+            return;
+          }
+
+          const parsed = parseJsonFromStdout(result.stdout);
+          const replyText = extractReplyText(parsed);
+          if (replyText) {
+            client.send({
+              type: "assistant.delta",
+              request_id: inbound.request_id,
+              session_key: sessionKey,
+              payload: { text: replyText },
+            });
+          }
+
+          const usage = parsed?.result?.meta?.agentMeta?.usage ?? {};
+          const latencyMs = parsed?.result?.meta?.durationMs;
           client.send({
-            type: "assistant.error",
+            type: "assistant.done",
             request_id: inbound.request_id,
             session_key: sessionKey,
-            payload: { code: "bad_request", message: "payload.text is required" },
+            payload: { usage, latency_ms: latencyMs },
           });
-          return;
-        }
-
-        const existing = turnsByRequestId.get(inbound.request_id);
-        if (existing) clearTurn(existing);
-
-        const turn: ActiveTurn = {
-          requestId: inbound.request_id,
-          sessionKey,
-          done: false,
-          timeout: setTimeout(() => {
-            failTurn(turn, "upstream_timeout", "OpenClaw turn timed out");
-          }, REQUEST_TIMEOUT_MS),
-        };
-        turnsByRequestId.set(turn.requestId, turn);
-        turnsBySessionKey.set(turn.sessionKey, turn);
-
-        const ok = api.runtime.system.enqueueSystemEvent(userText, {
-          sessionKey: turn.sessionKey,
-          contextKey: turn.requestId,
-        });
-        if (!ok) {
-          failTurn(turn, "enqueue_failed", "failed to enqueue message to OpenClaw");
-          return;
-        }
-        api.runtime.system.requestHeartbeatNow({
-          sessionKey: turn.sessionKey,
-          reason: `bridge:${turn.requestId}`,
+        })().catch((err: unknown) => {
+          sendError(
+            inbound.request_id,
+            sessionKey,
+            "upstream_exception",
+            String(err ?? "unknown upstream exception"),
+          );
         });
       },
-    });
-
-    api.runtime.events.onAgentEvent((evt) => {
-      const byRun = turnsByRequestId.get(evt.runId);
-      const bySession = evt.sessionKey ? bindTurnBySession(evt.sessionKey) : null;
-      const turn = byRun ?? bySession;
-      if (!turn || turn.done) return;
-      if (!turn.runId) {
-        turn.runId = evt.runId;
-        turnsByRequestId.set(evt.runId, turn);
-      }
-      const data = asRecord(evt.data) ?? {};
-
-      if (evt.stream === "assistant") {
-        const text = collectText(data);
-        if (text) {
-          client.send({
-            type: "assistant.delta",
-            request_id: turn.requestId,
-            session_key: turn.sessionKey,
-            seq: evt.seq,
-            payload: { text },
-          });
-        }
-        if (lifecycleDone(data)) {
-          finishTurn(turn, { run_id: evt.runId, seq: evt.seq });
-        }
-        return;
-      }
-
-      if (evt.stream === "tool") {
-        client.send({
-          type: "tool.event",
-          request_id: turn.requestId,
-          session_key: turn.sessionKey,
-          seq: evt.seq,
-          payload: data,
-        });
-        return;
-      }
-
-      if (evt.stream === "error") {
-        failTurn(
-          turn,
-          asString(data.code) ?? "upstream_error",
-          asString(data.message) ?? "unknown upstream error",
-        );
-        return;
-      }
-
-      if (evt.stream === "lifecycle" && lifecycleDone(data)) {
-        finishTurn(turn, { run_id: evt.runId, seq: evt.seq });
-      }
     });
 
     api.runtime.log?.("info", `[${PLUGIN_ID}] reverse WS bridge started: ${wsUrl}`);

@@ -1,12 +1,4 @@
 declare module "openclaw/plugin-sdk" {
-  export type AgentEventPayload = {
-    runId: string;
-    seq: number;
-    stream: string;
-    sessionKey?: string;
-    data: Record<string, unknown>;
-  };
-
   export interface OpenClawPluginApi {
     runtime: {
       log?: (level: string, message: string) => void;
@@ -17,14 +9,26 @@ declare module "openclaw/plugin-sdk" {
         ) => boolean;
         requestHeartbeatNow: (options?: {
           reason?: string;
+          coalesceMs?: number;
           agentId?: string;
           sessionKey?: string;
         }) => void;
-      };
-      events: {
-        onAgentEvent: (listener: (evt: AgentEventPayload) => void) => () => boolean;
+        runCommandWithTimeout: (
+          argv: string[],
+          options: { timeoutMs: number; cwd?: string; input?: string; env?: Record<string, string> },
+        ) => Promise<{
+          pid?: number;
+          stdout: string;
+          stderr: string;
+          code: number | null;
+          signal: string | null;
+          killed: boolean;
+          termination: "exit" | "timeout" | "no-output-timeout" | "signal";
+          noOutputTimedOut?: boolean;
+        }>;
       };
     };
+    registerChannel: (registration: unknown) => void;
     logger: {
       info?: (message: string) => void;
       warn?: (message: string) => void;

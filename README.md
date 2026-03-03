@@ -4,6 +4,13 @@ This repository is intentionally minimized to two parts:
 - `apps/python-gateway` (FastAPI + uv)
 - `plugins/ts-openclaw-channel` (OpenClaw plugin + npm)
 
+## Documentation
+
+- End-to-end guide (CN): `docs/sse-bridge-cron-guide.zh-CN.md`
+- Python gateway details: `apps/python-gateway/README.md`
+- Plugin details: `plugins/ts-openclaw-channel/README.md`
+- One-click plugin install: `scripts/install-openclaw-plugin.sh`
+
 ## One-command smoke check
 
 From repo root:
