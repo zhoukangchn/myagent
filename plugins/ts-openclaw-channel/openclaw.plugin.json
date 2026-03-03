@@ -1,0 +1,16 @@
+{
+  "id": "ts-openclaw-channel",
+  "name": "TS OpenClaw Channel",
+  "version": "0.1.0",
+  "description": "OpenClaw thin channel plugin for Python SSE bridge",
+  "configSchema": {
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  "extensions": [
+    "index.ts"
+  ]
+}

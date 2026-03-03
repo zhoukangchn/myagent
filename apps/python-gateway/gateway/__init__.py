@@ -1,0 +1,1 @@
+"""SSE gateway package."""

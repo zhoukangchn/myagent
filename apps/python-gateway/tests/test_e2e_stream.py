@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import json
+import threading
+import time
+
+from fastapi.testclient import TestClient
+
+from gateway.core.security import build_signature_payload, verify_signature
+from main import app
+
+
+def sign(secret: str, method: str, path: str, ts: str, nonce: str, body: bytes) -> str:
+    payload = build_signature_payload(method, path, ts, nonce, body)
+    # verify_signature computes HMAC internally; here we brute-force by comparing expected digest.
+    import hashlib
+    import hmac
+
+    sig = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    assert verify_signature(secret, payload, sig)
+    return sig
+
+
+def test_e2e_sse_over_reverse_ws():
+    ts = str(int(time.time()))
+    ws_nonce = "ws-nonce-1"
+    http_nonce = "http-nonce-1"
+
+    chat_payload = {
+        "chat_id": "chat-1",
+        "thread_id": "t-1",
+        "sender_id": "u-1",
+        "message_id": "m-1",
+        "text": "hello",
+        "metadata": {},
+    }
+    body = json.dumps(chat_payload).encode("utf-8")
+
+    ws_headers = {
+        "x-openclaw-id": "openclaw-test",
+        "x-timestamp": ts,
+        "x-nonce": ws_nonce,
+        "x-signature": sign("dev-openclaw-secret", "GET", "/v1/ws/openclaw", ts, ws_nonce, b""),
+    }
+    http_headers = {
+        "x-client-id": "chat-client-test",
+        "x-timestamp": ts,
+        "x-nonce": http_nonce,
+        "x-signature": sign("dev-chat-secret", "POST", "/v1/chat/stream", ts, http_nonce, body),
+        "content-type": "application/json",
+    }
+
+    with TestClient(app) as client:
+        # Keep a reverse ws connected, echoing a streaming response back to gateway.
+        with client.websocket_connect("/v1/ws/openclaw", headers=ws_headers) as ws:
+            def ws_worker():
+                msg = ws.receive_json()
+                assert msg["type"] == "user.message"
+                req_id = msg["request_id"]
+                ws.send_json({"type": "assistant.delta", "request_id": req_id, "payload": {"text": "Hi"}})
+                ws.send_json(
+                    {
+                        "type": "assistant.done",
+                        "request_id": req_id,
+                        "payload": {"usage": {"input_tokens": 1, "output_tokens": 1}, "latency_ms": 5},
+                    }
+                )
+
+            t = threading.Thread(target=ws_worker)
+            t.start()
+
+            resp = client.post("/v1/chat/stream", content=body, headers=http_headers)
+            t.join(timeout=2)
+
+            assert resp.status_code == 200
+            assert "text/event-stream" in (resp.headers.get("content-type") or "")
+            assert "event: ack" in resp.text
+            assert "event: delta" in resp.text
+            assert "event: done" in resp.text

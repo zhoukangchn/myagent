@@ -1,0 +1,26 @@
+{
+  "name": "ts-openclaw-channel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw thin channel plugin for Python SSE bridge",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["index.ts"]
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check:manifest": "node scripts/validate-manifest.mjs",
+    "check:types": "tsc -p tsconfig.json --noEmit",
+    "check": "npm run check:manifest && npm run check:types"
+  },
+  "dependencies": {
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/ws": "^8.5.13"
+  }
+}

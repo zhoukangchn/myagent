@@ -1,5 +1,12 @@
-.venv/
+# Python
 __pycache__/
+*.py[cod]
+.venv/
 .pytest_cache/
-.uv-cache/
-.sisyphus/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Env
+.env

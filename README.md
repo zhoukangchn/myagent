@@ -1,224 +1,28 @@
-# Python MCP Hub Demo
+# SSE + WS Bridge Workspace
 
-A demo MCP hub with:
-- Control plane REST APIs for downstream server registration
-- Data plane MCP powered by official FastMCP server implementation
-- In-memory storage and session mapping (demo only)
+This repository is intentionally minimized to two parts:
+- `apps/python-gateway` (FastAPI + uv)
+- `plugins/ts-openclaw-channel` (OpenClaw plugin + npm)
 
-## Run (uv)
+## One-command smoke check
+
+From repo root:
 
 ```bash
+./scripts/smoke.sh
+```
+
+It will:
+1. Run Python tests, including end-to-end SSE over reverse WebSocket flow.
+2. Run plugin manifest/type checks.
+3. Clean plugin `node_modules` after checks.
+
+## Manual run (gateway)
+
+```bash
+cd apps/python-gateway
 uv venv
 source .venv/bin/activate
 uv pip install -e '.[dev]'
-uv run uvicorn app.main:app --reload
-```
-
-Open `http://127.0.0.1:8000`.
-
-## Run Demo Weather MCP Server
-
-In another terminal:
-
-```bash
-cd /home/zk/myagent
-source .venv/bin/activate
-uv run uvicorn demo.weather_server:app --host 127.0.0.1 --port 9001 --reload
-```
-
-## Control Plane API
-
-- `POST /api/servers`
-- `GET /api/servers`
-- `GET /api/servers/{server_id}`
-- `GET /api/servers/{server_id}/mcp-config`
-- `DELETE /api/servers/{server_id}`
-- `GET /api/health`
-
-## Data Plane MCP
-
-`POST /mcp/`
-
-Required header:
-- `x-mcp-server-id: <server_id>`
-
-Supported methods:
-- `initialize`
-- `tools/list`
-- `tools/call`
-
-Tool naming:
-- Hub exposes aggregated tools as `server_name.tool_name`.
-- Example: `weather-downstream.get_weather`.
-- Weather demo tools include `get_weather` and `get_weather_forecast`.
-
-## Demo Flow (curl)
-
-1. Register downstream server:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/api/servers \
-  -H 'content-type: application/json' \
-  -d '{
-    "name": "weather-downstream",
-    "base_url": "http://127.0.0.1:9001",
-    "mcp_endpoint": "/mcp",
-    "description": "demo",
-    "tags": ["demo"],
-    "headers": {}
-  }'
-```
-
-2. Initialize MCP on Hub (replace `<server_id>`):
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp/ \
-  -H 'content-type: application/json' \
-  -H 'x-mcp-server-id: <server_id>' \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":1,
-    "method":"initialize",
-    "params":{
-      "clientInfo":{"name":"demo-client"},
-      "capabilities":{}
-    }
-  }'
-```
-
-3. List tools:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp/ \
-  -H 'content-type: application/json' \
-  -H 'x-mcp-server-id: <server_id>' \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":2,
-    "method":"tools/list",
-    "params":{}
-  }'
-```
-
-4. Call weather tool:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp/ \
-  -H 'content-type: application/json' \
-  -H 'x-mcp-server-id: <server_id>' \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":3,
-    "method":"tools/call",
-    "params":{
-      "name":"weather-downstream.get_weather",
-      "arguments":{"city":"Beijing"}
-    }
-  }'
-```
-
-5. Call weather forecast tool:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/mcp/ \
-  -H 'content-type: application/json' \
-  -H 'x-mcp-server-id: <server_id>' \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":4,
-    "method":"tools/call",
-    "params":{
-      "name":"weather-downstream.get_weather_forecast",
-      "arguments":{"city":"Beijing","days":3}
-    }
-  }'
-```
-
-## Official Python MCP SDK Example
-
-See `examples/sdk_client.py`:
-
-```bash
-uv run python examples/sdk_client.py --server-id <server_id> --city Beijing
-```
-
-## Export Standard `mcpServers` Config
-
-Export a client-friendly MCP config for a registered `server_id`:
-
-```bash
-curl -sS http://127.0.0.1:8000/api/servers/<server_id>/mcp-config -o mcp-config.json
-```
-
-Example response:
-
-```json
-{
-  "mcpServers": {
-    "weather-downstream": {
-      "url": "http://127.0.0.1:8000/mcp/",
-      "headers": {
-        "x-mcp-server-id": "<server_id>"
-      }
-    }
-  }
-}
-```
-
-Notes:
-- This format is intended for MCP clients that accept `mcpServers` JSON.
-- Hub only returns routing header `x-mcp-server-id` here; downstream private headers are not exposed.
-
-## Python Demo Using Exported `mcpServers`
-
-See `examples/mcpservers_client.py`:
-
-```bash
-uv run python examples/mcpservers_client.py --config-file mcp-config.json --city Beijing
-```
-
-This demo will:
-- print all discovered tools from the selected MCP server,
-- auto-select one tool (`*.get_weather` first, then `*.get_weather_forecast`, otherwise the first tool),
-- and try one `tools/call` with inferred arguments.
-
-Official code style used in this repo (no compatibility fallback):
-
-```python
-import httpx
-from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
-
-endpoint = "http://127.0.0.1:8000/mcp/"
-server_id = "<server_id>"
-
-async with httpx.AsyncClient(headers={"x-mcp-server-id": server_id}) as client:
-    async with streamable_http_client(endpoint, http_client=client) as (read_stream, write_stream, _):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-            tools = await session.list_tools()
-            result = await session.call_tool("weather-downstream.get_weather", {"city": "Beijing"})
-```
-
-## Notes
-
-- Demo intentionally has no auth and no persistence.
-- Downstream weather server is implemented with official FastMCP (streamable HTTP transport).
-- Tool metadata cache refreshes on server registration and periodically in background.
-- Raw weather tool output is native text (not custom content/isError wrapping in downstream).
-
-## SkillKit Demo (Local Skills)
-
-This repo also contains a tiny SkillKit demo:
-
-- Demo runner: `skillkit_demo.py`
-- Sample skill: `skills/code-reviewer/SKILL.md`
-
-Run:
-
-```bash
-cd ~/myagent
-source .venv/bin/activate
-uv pip install skillkit
-uv run python skillkit_demo.py
+uv run uvicorn main:app --host 127.0.0.1 --port 8010 --reload
 ```
