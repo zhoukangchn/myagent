@@ -73,6 +73,17 @@ async def chat_stream(request: Request) -> StreamingResponse:
                     yield encode_sse("done", done)
                     return
 
+                if msg_type == "tool.event":
+                    yield encode_sse(
+                        "tool_event",
+                        {
+                            "request_id": request_id,
+                            "tool": bridge_msg.payload.get("tool"),
+                            "data": bridge_msg.payload,
+                        },
+                    )
+                    continue
+
                 if msg_type == "assistant.error":
                     yield encode_sse(
                         "error",

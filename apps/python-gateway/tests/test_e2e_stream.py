@@ -60,6 +60,13 @@ def test_e2e_sse_over_reverse_ws():
                 ws.send_json({"type": "assistant.delta", "request_id": req_id, "payload": {"text": "Hi"}})
                 ws.send_json(
                     {
+                        "type": "tool.event",
+                        "request_id": req_id,
+                        "payload": {"tool": "search", "status": "running"},
+                    }
+                )
+                ws.send_json(
+                    {
                         "type": "assistant.done",
                         "request_id": req_id,
                         "payload": {"usage": {"input_tokens": 1, "output_tokens": 1}, "latency_ms": 5},
@@ -76,4 +83,5 @@ def test_e2e_sse_over_reverse_ws():
             assert "text/event-stream" in (resp.headers.get("content-type") or "")
             assert "event: ack" in resp.text
             assert "event: delta" in resp.text
+            assert "event: tool_event" in resp.text
             assert "event: done" in resp.text
