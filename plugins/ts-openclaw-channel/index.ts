@@ -419,6 +419,12 @@ const plugin = {
                 CommandAuthorized: true,
               });
 
+              const dispatchStart = Date.now();
+              api.runtime.log?.(
+                "info",
+                `[${PLUGIN_ID}] channel-inbound dispatch start request_id=${inbound.request_id} session_key=${sessionKey}`,
+              );
+
               await Promise.race([
                 api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
                   ctx: ctxPayload,
@@ -426,6 +432,10 @@ const plugin = {
                   dispatcherOptions: {
                     deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
                       const text = payload.text ?? "";
+                      api.runtime.log?.(
+                        "info",
+                        `[${PLUGIN_ID}] channel-inbound deliver request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} text_len=${text.length}`,
+                      );
                       if (!text) return;
 
                       let toSend = "";
@@ -447,7 +457,17 @@ const plugin = {
                         payload: { text: toSend },
                       });
                     },
+                    onSkip: (payload: { text?: string }, info: { kind?: string; reason?: string }) => {
+                      api.runtime.log?.(
+                        "warn",
+                        `[${PLUGIN_ID}] channel-inbound skip request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} reason=${info?.reason ?? "unknown"} text_len=${(payload?.text ?? "").length}`,
+                      );
+                    },
                     onError: (err: unknown, info: { kind?: string }) => {
+                      api.runtime.log?.(
+                        "warn",
+                        `[${PLUGIN_ID}] channel-inbound dispatcher error request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} err=${String(err)}`,
+                      );
                       throw new Error(`${info.kind}: ${String(err)}`);
                     },
                   },
@@ -456,6 +476,11 @@ const plugin = {
                   setTimeout(() => reject(new Error("channel-inbound timeout")), REQUEST_TIMEOUT_MS),
                 ),
               ]);
+
+              api.runtime.log?.(
+                "info",
+                `[${PLUGIN_ID}] channel-inbound dispatch done request_id=${inbound.request_id} elapsed_ms=${Date.now() - dispatchStart} delivered=${delivered}`,
+              );
             } catch (err) {
               api.runtime.log?.(
                 "warn",
