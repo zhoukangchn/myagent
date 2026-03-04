@@ -423,7 +423,8 @@ const plugin = {
                   ctx: ctxPayload,
                   cfg: api.config,
                   dispatcherOptions: {
-                    deliver: async (payload: { text?: string }) => {
+                    deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
+                      if (info?.kind && info.kind !== "final") return;
                       const text = payload.text?.trim();
                       if (!text) return;
                       delivered = true;
