@@ -503,8 +503,8 @@ const plugin = {
               sendError(
                 inbound.request_id,
                 sessionKey,
-                "upstream_timeout",
-                "channel-inbound produced no output",
+                "upstream_empty",
+                "channel-inbound returned no text payload",
               );
               return;
             }
