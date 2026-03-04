@@ -22,13 +22,27 @@ async def chat_stream(request: Request) -> StreamingResponse:
 
     request_id = str(uuid4())
     session_key = f"{payload.chat_id}:{payload.thread_id}"
+    print(f"[chat] stream start request_id={request_id} session_key={session_key}")
 
     async def event_iter():
         yield encode_sse("ack", {"request_id": request_id, "session_key": session_key})
 
+        acquired = await bridge_service.try_acquire_session(session_key, request_id)
+        if not acquired:
+            yield encode_sse(
+                "error",
+                {
+                    "request_id": request_id,
+                    "code": "session_busy",
+                    "message": "previous request is still running for this session",
+                },
+            )
+            return
+
         is_connected = await bridge_service.is_openclaw_connected()
         if not is_connected:
             yield encode_sse("error", {"request_id": request_id, "code": "upstream_unavailable"})
+            await bridge_service.release_session(session_key, request_id)
             return
 
         q = await bridge_service.register_stream(request_id)
@@ -58,6 +72,7 @@ async def chat_stream(request: Request) -> StreamingResponse:
 
                 bridge_msg = BridgeMessage.model_validate(msg)
                 msg_type = bridge_msg.type
+                print(f"[chat] stream recv request_id={request_id} msg_type={msg_type}")
 
                 if msg_type == "assistant.delta":
                     delta = bridge_msg.payload.get("text", "")
@@ -96,5 +111,6 @@ async def chat_stream(request: Request) -> StreamingResponse:
                     return
         finally:
             await bridge_service.unregister_stream(request_id)
+            await bridge_service.release_session(session_key, request_id)
 
     return StreamingResponse(event_iter(), media_type="text/event-stream")

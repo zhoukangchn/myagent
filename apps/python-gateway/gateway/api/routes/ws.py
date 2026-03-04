@@ -22,6 +22,9 @@ async def openclaw_ws(ws: WebSocket):
         while True:
             raw = await ws.receive_text()
             data = json.loads(raw)
+            print(
+                f"[ws] inbound type={data.get('type')} request_id={data.get('request_id')} session_key={data.get('session_key')}"
+            )
             if data.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
                 continue
