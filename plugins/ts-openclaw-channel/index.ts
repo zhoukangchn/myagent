@@ -1,4 +1,8 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import {
+  createNormalizedOutboundDeliverer,
+  createReplyPrefixOptions,
+  type OpenClawPluginApi,
+} from "openclaw/plugin-sdk";
 import { BridgeClient } from "./src/bridge-client.js";
 
 const PLUGIN_ID = "ts-openclaw-channel";
@@ -333,12 +337,92 @@ const plugin = {
         const sessionId = normalizeSessionId(`${bridgeAgentId}_${sessionKey}`);
 
         void (async () => {
+          api.runtime.log?.(
+            "info",
+            `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey} mode=${bridgeMode}`,
+          );
+
+          if (bridgeMode === "channel-inbound") {
+            const route = api.runtime.channel.routing.resolveAgentRoute({
+              cfg: api.config,
+              channel: CHANNEL_ID,
+              accountId: "default",
+              peer: { kind: "direct", id: sessionKey },
+            });
+
+            const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
+              Body: userText,
+              RawBody: userText,
+              CommandBody: userText,
+              From: `sse_bridge:${asString(inbound.payload?.sender_id) ?? "unknown"}`,
+              To: `sse_bridge:${sessionKey}`,
+              SessionKey: route.sessionKey,
+              AccountId: route.accountId,
+              ChatType: "direct",
+              ConversationLabel: sessionKey,
+              SenderId: asString(inbound.payload?.sender_id) ?? undefined,
+              MessageSid: asString(inbound.payload?.message_id) ?? inbound.request_id,
+              Timestamp: Date.now(),
+              Provider: CHANNEL_ID,
+              Surface: CHANNEL_ID,
+              OriginatingChannel: CHANNEL_ID,
+              OriginatingTo: sessionKey,
+              CommandAuthorized: true,
+            });
+
+            const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+              cfg: api.config,
+              agentId: route.agentId,
+              channel: CHANNEL_ID,
+              accountId: route.accountId,
+            });
+
+            const deliverReply = createNormalizedOutboundDeliverer(async (payload: { text?: string }) => {
+              const text = payload.text?.trim();
+              if (!text) return;
+              client.send({
+                type: "assistant.delta",
+                request_id: inbound.request_id,
+                session_key: sessionKey,
+                payload: { text },
+              });
+            });
+
+            await api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+              ctx: ctxPayload,
+              cfg: api.config,
+              dispatcherOptions: {
+                ...prefixOptions,
+                deliver: deliverReply,
+                onError: (err: unknown, info: { kind?: string }) => {
+                  sendError(
+                    inbound.request_id,
+                    sessionKey,
+                    "upstream_error",
+                    `${info.kind}: ${String(err)}`.slice(0, 800),
+                  );
+                },
+              },
+              replyOptions: {
+                onModelSelected,
+              },
+            });
+
+            client.send({
+              type: "assistant.done",
+              request_id: inbound.request_id,
+              session_key: sessionKey,
+              payload: {},
+            });
+            return;
+          }
+
           if (bridgeMode !== "legacy-cli") {
             sendError(
               inbound.request_id,
               sessionKey,
               "unsupported_mode",
-              `bridge mode '${bridgeMode}' is not implemented in this demo plugin`,
+              `bridge mode '${bridgeMode}' is not implemented`,
             );
             return;
           }
@@ -355,11 +439,6 @@ const plugin = {
             String(OPENCLAW_AGENT_TIMEOUT_SEC),
             "--json",
           ]);
-
-          api.runtime.log?.(
-            "info",
-            `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey} mode=${bridgeMode}`,
-          );
 
           const result = await api.runtime.system.runCommandWithTimeout(cmd, {
             timeoutMs: REQUEST_TIMEOUT_MS,
