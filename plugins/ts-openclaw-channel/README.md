@@ -33,6 +33,7 @@ OpenClaw channel plugin for bridging:
 
 - `BRIDGE_WS_URL` default `ws://127.0.0.1:8010/v1/ws/openclaw`
 - `OPENCLAW_ID` default `openclaw-local`
+- `OPENCLAW_CMD` default `openclaw` (Windows auto-fallback to `openclaw.cmd`)
 - `BRIDGE_OPENCLAW_AGENT_ID` default `main`
 - `SSE_CHANNEL_DEFAULT_TO` default empty
   - format: `chat_id:thread_id`

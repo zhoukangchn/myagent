@@ -5,6 +5,12 @@ const PLUGIN_ID = "ts-openclaw-channel";
 const CHANNEL_ID = "sse_bridge";
 const REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
+function resolveOpenclawCmd(): string {
+  const fromEnv = process.env.OPENCLAW_CMD?.trim();
+  if (fromEnv) return fromEnv;
+  return process.platform === "win32" ? "openclaw.cmd" : "openclaw";
+}
+
 type InboundUserMessage = {
   type: "user.message";
   request_id: string;
@@ -303,7 +309,7 @@ const plugin = {
 
         void (async () => {
           const cmd = [
-            "openclaw",
+            resolveOpenclawCmd(),
             "agent",
             "--agent",
             bridgeAgentId,
