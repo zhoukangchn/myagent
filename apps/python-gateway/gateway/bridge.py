@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from typing import Any
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 class BridgeService:
@@ -30,24 +34,25 @@ class BridgeService:
         q: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         async with self._lock:
             self._streams[request_id] = q
-            print(f"[bridge] register_stream request_id={request_id} total_streams={len(self._streams)}")
+            logger.debug("register_stream request_id=%s total_streams=%d", request_id, len(self._streams))
         return q
 
     async def unregister_stream(self, request_id: str) -> None:
         async with self._lock:
             self._streams.pop(request_id, None)
-            print(f"[bridge] unregister_stream request_id={request_id} total_streams={len(self._streams)}")
+            logger.debug("unregister_stream request_id=%s total_streams=%d", request_id, len(self._streams))
 
     async def try_acquire_session(self, session_key: str, request_id: str) -> bool:
         async with self._lock:
             current = self._inflight_by_session.get(session_key)
             if current and current != request_id:
-                print(
-                    f"[bridge] session busy session_key={session_key} active_request_id={current} incoming_request_id={request_id}"
+                logger.warning(
+                    "session busy session_key=%s active_request_id=%s incoming_request_id=%s",
+                    session_key, current, request_id,
                 )
                 return False
             self._inflight_by_session[session_key] = request_id
-            print(f"[bridge] acquire session_key={session_key} request_id={request_id}")
+            logger.debug("acquire session_key=%s request_id=%s", session_key, request_id)
             return True
 
     async def release_session(self, session_key: str, request_id: str) -> None:
@@ -55,7 +60,7 @@ class BridgeService:
             current = self._inflight_by_session.get(session_key)
             if current == request_id:
                 self._inflight_by_session.pop(session_key, None)
-                print(f"[bridge] release session_key={session_key} request_id={request_id}")
+                logger.debug("release session_key=%s request_id=%s", session_key, request_id)
 
     async def send_to_openclaw(self, message: dict[str, Any]) -> None:
         async with self._lock:
@@ -67,13 +72,16 @@ class BridgeService:
     async def dispatch_from_openclaw(self, message: dict[str, Any]) -> None:
         request_id = message.get("request_id")
         if not request_id:
-            print(f"[bridge] dispatch_from_openclaw missing request_id type={message.get('type')}")
+            logger.warning("dispatch_from_openclaw missing request_id type=%s", message.get("type"))
             return
         async with self._lock:
             q = self._streams.get(str(request_id))
             has_stream = q is not None
-        print(
-            f"[bridge] dispatch_from_openclaw request_id={request_id} type={message.get('type')} matched_stream={has_stream}"
+        raw_json = json.dumps(message, ensure_ascii=False)
+        raw_preview = raw_json if len(raw_json) <= 500 else raw_json[:500] + "...(truncated)"
+        logger.info(
+            "dispatch_from_openclaw request_id=%s type=%s matched_stream=%s raw=%s",
+            request_id, message.get("type"), has_stream, raw_preview,
         )
         if q is not None:
             await q.put(message)

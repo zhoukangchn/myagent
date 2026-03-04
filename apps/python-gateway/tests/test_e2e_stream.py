@@ -6,19 +6,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from gateway.core.security import build_signature_payload, verify_signature
 from main import app
-
-
-def sign(secret: str, method: str, path: str, ts: str, nonce: str, body: bytes) -> str:
-    payload = build_signature_payload(method, path, ts, nonce, body)
-    # verify_signature computes HMAC internally; here we brute-force by comparing expected digest.
-    import hashlib
-    import hmac
-
-    sig = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
-    assert verify_signature(secret, payload, sig)
-    return sig
 
 
 def test_e2e_sse_over_reverse_ws():
@@ -35,21 +23,10 @@ def test_e2e_sse_over_reverse_ws():
         "metadata": {},
     }
     body = json.dumps(chat_payload).encode("utf-8")
-
-    ws_headers = {
-        "x-openclaw-id": "openclaw-test",
-        "x-timestamp": ts,
-        "x-nonce": ws_nonce,
-        "x-signature": sign("dev-openclaw-secret", "GET", "/v1/ws/openclaw", ts, ws_nonce, b""),
-    }
+    ws_headers = {}
     http_headers = {
-        "x-client-id": "chat-client-test",
-        "x-timestamp": ts,
-        "x-nonce": http_nonce,
-        "x-signature": sign("dev-chat-secret", "POST", "/v1/chat/stream", ts, http_nonce, body),
         "content-type": "application/json",
     }
-
     with TestClient(app) as client:
         # Keep a reverse ws connected, echoing a streaming response back to gateway.
         with client.websocket_connect("/v1/ws/openclaw", headers=ws_headers) as ws:

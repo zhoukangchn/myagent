@@ -1,28 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from gateway.core.sse import encode_sse
-from gateway.core.state import auth_service, bridge_service, settings
-from gateway.schemas.bridge import BridgeMessage
-from gateway.schemas.chat import ChatStreamRequest
+from gateway.app import bridge_service, settings
+from gateway.schemas import BridgeMessage, ChatStreamRequest
+from gateway.sse import encode_sse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/v1/chat/stream")
 async def chat_stream(request: Request) -> StreamingResponse:
     body = await request.body()
-    auth_service.verify_http_signature(request, body)
     payload = ChatStreamRequest.model_validate_json(body)
 
     request_id = str(uuid4())
     session_key = f"{payload.chat_id}:{payload.thread_id}"
-    print(f"[chat] stream start request_id={request_id} session_key={session_key}")
+    logger.info("stream start request_id=%s session_key=%s", request_id, session_key)
 
     async def event_iter():
         yield encode_sse("ack", {"request_id": request_id, "session_key": session_key})
@@ -47,15 +48,15 @@ async def chat_stream(request: Request) -> StreamingResponse:
 
         q = await bridge_service.register_stream(request_id)
         try:
-            await bridge_service.send_to_openclaw(
-                {
-                    "type": "user.message",
-                    "request_id": request_id,
-                    "session_key": session_key,
-                    "seq": 1,
-                    "payload": payload.model_dump(),
-                }
-            )
+            outgoing = {
+                "type": "user.message",
+                "request_id": request_id,
+                "session_key": session_key,
+                "seq": 1,
+                "payload": payload.model_dump(),
+            }
+            logger.info("send_to_openclaw request_id=%s msg=%s", request_id, json.dumps(outgoing, ensure_ascii=False))
+            await bridge_service.send_to_openclaw(outgoing)
             while True:
                 try:
                     msg = await asyncio.wait_for(q.get(), timeout=settings.stream_timeout_sec)
@@ -72,7 +73,9 @@ async def chat_stream(request: Request) -> StreamingResponse:
 
                 bridge_msg = BridgeMessage.model_validate(msg)
                 msg_type = bridge_msg.type
-                print(f"[chat] stream recv request_id={request_id} msg_type={msg_type}")
+                raw_payload = json.dumps(bridge_msg.payload, ensure_ascii=False)
+                payload_preview = raw_payload if len(raw_payload) <= 300 else raw_payload[:300] + "...(truncated)"
+                logger.info("stream recv request_id=%s msg_type=%s payload=%s", request_id, msg_type, payload_preview)
 
                 if msg_type == "assistant.delta":
                     delta = bridge_msg.payload.get("text", "")
