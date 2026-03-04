@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from gateway.app import bridge_service
+from app.main import bridge_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

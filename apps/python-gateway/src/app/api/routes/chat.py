@@ -8,9 +8,9 @@ from uuid import uuid4
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
-from gateway.app import bridge_service, settings
-from gateway.schemas import BridgeMessage, ChatStreamRequest
-from gateway.sse import encode_sse
+from app.main import bridge_service, settings
+from app.models.schemas import BridgeMessage, ChatStreamRequest
+from app.utils.sse import encode_sse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

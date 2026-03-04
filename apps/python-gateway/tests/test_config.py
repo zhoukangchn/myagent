@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gateway.config import get_settings
+from app.core.config import get_settings
 
 
 def test_settings_defaults():

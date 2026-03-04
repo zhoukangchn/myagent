@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gateway.sse import encode_sse
+from app.utils.sse import encode_sse
 
 
 def test_encode_sse_uses_real_newlines() -> None:

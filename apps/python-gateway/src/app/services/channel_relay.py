@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from gateway.schemas import ChannelPostRequest
+from app.models.schemas import ChannelPostRequest
 
 logger = logging.getLogger(__name__)
 

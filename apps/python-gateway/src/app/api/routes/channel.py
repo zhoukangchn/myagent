@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from gateway.channel_relay import relay_channel_post
-from gateway.schemas import ChannelPostRequest
+from app.models.schemas import ChannelPostRequest
+from app.services.channel_relay import relay_channel_post
 
 router = APIRouter()
 
