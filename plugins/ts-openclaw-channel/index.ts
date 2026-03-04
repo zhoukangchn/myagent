@@ -3,7 +3,17 @@ import { BridgeClient } from "./src/bridge-client.js";
 
 const PLUGIN_ID = "ts-openclaw-channel";
 const CHANNEL_ID = "sse_bridge";
-const REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+const REQUEST_TIMEOUT_MS = readPositiveIntEnv("BRIDGE_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS);
+const OPENCLAW_AGENT_TIMEOUT_SEC = readPositiveIntEnv("OPENCLAW_AGENT_TIMEOUT_SEC", 90);
 
 function resolveOpenclawCmd(): string {
   const fromEnv = process.env.OPENCLAW_CMD?.trim();
@@ -169,6 +179,7 @@ const plugin = {
     const secret = process.env.OPENCLAW_SHARED_SECRET ?? "dev-openclaw-secret";
     const openclawId = process.env.OPENCLAW_ID ?? "openclaw-local";
     const bridgeAgentId = process.env.BRIDGE_OPENCLAW_AGENT_ID ?? "main";
+    const bridgeMode = (process.env.BRIDGE_MODE ?? "legacy-cli").trim().toLowerCase();
     const channelPostUrl = process.env.SSE_CHANNEL_POST_URL ?? "";
     const defaultTo = process.env.SSE_CHANNEL_DEFAULT_TO ?? "";
 
@@ -322,6 +333,16 @@ const plugin = {
         const sessionId = normalizeSessionId(`${bridgeAgentId}_${sessionKey}`);
 
         void (async () => {
+          if (bridgeMode !== "legacy-cli") {
+            sendError(
+              inbound.request_id,
+              sessionKey,
+              "unsupported_mode",
+              `bridge mode '${bridgeMode}' is not implemented in this demo plugin`,
+            );
+            return;
+          }
+
           const cmd = buildAgentCommand([
             "agent",
             "--agent",
@@ -330,12 +351,24 @@ const plugin = {
             sessionId,
             "--message",
             userText,
+            "--timeout",
+            String(OPENCLAW_AGENT_TIMEOUT_SEC),
             "--json",
           ]);
+
+          api.runtime.log?.(
+            "info",
+            `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey} mode=${bridgeMode}`,
+          );
 
           const result = await api.runtime.system.runCommandWithTimeout(cmd, {
             timeoutMs: REQUEST_TIMEOUT_MS,
           });
+
+          api.runtime.log?.(
+            "info",
+            `[${PLUGIN_ID}] cmd result request_id=${inbound.request_id} code=${result.code} stdout_len=${result.stdout.length} stderr_len=${result.stderr.length}`,
+          );
 
           if (result.code !== 0) {
             const detail = (result.stderr || result.stdout || "openclaw agent failed").trim();
@@ -373,7 +406,10 @@ const plugin = {
       },
     });
 
-    api.runtime.log?.("info", `[${PLUGIN_ID}] reverse WS bridge started: ${wsUrl}`);
+    api.runtime.log?.(
+      "info",
+      `[${PLUGIN_ID}] reverse WS bridge started: ${wsUrl} mode=${bridgeMode} reqTimeoutMs=${REQUEST_TIMEOUT_MS} agentTimeoutSec=${OPENCLAW_AGENT_TIMEOUT_SEC}`,
+    );
   },
 };
 

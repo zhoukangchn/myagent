@@ -34,6 +34,9 @@ OpenClaw channel plugin for bridging:
 - `BRIDGE_WS_URL` default `ws://127.0.0.1:8010/v1/ws/openclaw`
 - `OPENCLAW_ID` default `openclaw-local`
 - `OPENCLAW_CMD` default `openclaw` (Windows runs via `cmd.exe /c`, defaulting to `openclaw.cmd`)
+- `BRIDGE_MODE` default `legacy-cli` (only `legacy-cli` is implemented in demo)
+- `BRIDGE_REQUEST_TIMEOUT_MS` default `120000`
+- `OPENCLAW_AGENT_TIMEOUT_SEC` default `90`
 - `BRIDGE_OPENCLAW_AGENT_ID` default `main`
 - `SSE_CHANNEL_DEFAULT_TO` default empty
   - format: `chat_id:thread_id`
