@@ -13,57 +13,12 @@ function readPositiveIntEnv(name: string, fallback: number): number {
 }
 
 const REQUEST_TIMEOUT_MS = readPositiveIntEnv("BRIDGE_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS);
-const OPENCLAW_AGENT_TIMEOUT_SEC = readPositiveIntEnv("OPENCLAW_AGENT_TIMEOUT_SEC", 90);
-
-function resolveOpenclawCmd(): string {
-  const fromEnv = process.env.OPENCLAW_CMD?.trim();
-  if (fromEnv) return fromEnv;
-  return process.platform === "win32" ? "openclaw.cmd" : "openclaw";
-}
-
-function quoteCmdArg(arg: string): string {
-  if (!arg) return '""';
-  if (!/[\s"^&|<>]/.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '""')}"`;
-}
-
-function buildAgentCommand(args: string[]): string[] {
-  const cmd = resolveOpenclawCmd();
-  if (process.platform !== "win32") return [cmd, ...args];
-
-  const commandLine = [cmd, ...args].map(quoteCmdArg).join(" ");
-  return ["cmd.exe", "/d", "/s", "/c", commandLine];
-}
 
 type InboundUserMessage = {
   type: "user.message";
   request_id: string;
   session_key?: string;
   payload?: Record<string, unknown>;
-};
-
-type InboundSystemEvent = {
-  type: "system.event";
-  request_id?: string;
-  session_key: string;
-  payload?: Record<string, unknown>;
-};
-
-type AgentCliResult = {
-  status?: string;
-  result?: {
-    payloads?: Array<{ text?: string | null }>;
-    meta?: {
-      durationMs?: number;
-      agentMeta?: {
-        usage?: {
-          input?: number;
-          output?: number;
-          total?: number;
-        };
-      };
-    };
-  };
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -84,19 +39,6 @@ function toInboundUserMessage(msg: unknown): InboundUserMessage | null {
     type: "user.message",
     request_id: requestId,
     session_key: asString(record.session_key) ?? undefined,
-    payload: asRecord(record.payload) ?? undefined,
-  };
-}
-
-function toInboundSystemEvent(msg: unknown): InboundSystemEvent | null {
-  const record = asRecord(msg);
-  if (!record || record.type !== "system.event") return null;
-  const sessionKey = asString(record.session_key);
-  if (!sessionKey) return null;
-  return {
-    type: "system.event",
-    request_id: asString(record.request_id) ?? undefined,
-    session_key: sessionKey,
     payload: asRecord(record.payload) ?? undefined,
   };
 }
@@ -145,41 +87,11 @@ async function postChannelMessage(params: {
   }
 }
 
-function parseJsonFromStdout(stdout: string): AgentCliResult | null {
-  const text = stdout.trim();
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as AgentCliResult;
-  } catch {
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start < 0 || end <= start) return null;
-    try {
-      return JSON.parse(text.slice(start, end + 1)) as AgentCliResult;
-    } catch {
-      return null;
-    }
-  }
-}
-
-function extractReplyText(result: AgentCliResult | null): string {
-  const payloads = result?.result?.payloads;
-  if (!Array.isArray(payloads)) return "";
-  return payloads
-    .map((p) => (typeof p?.text === "string" ? p.text : ""))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
-
 const plugin = {
   id: PLUGIN_ID,
   register(api: OpenClawPluginApi) {
-    const wsUrl = process.env.BRIDGE_WS_URL ?? "ws://127.0.0.1:8010/v1/ws/openclaw";
-    const secret = process.env.OPENCLAW_SHARED_SECRET ?? "dev-openclaw-secret";
-    const openclawId = process.env.OPENCLAW_ID ?? "openclaw-local";
+    const wsUrl = process.env.BRIDGE_WS_URL ?? "ws://127.0.0.1:8000/v1/ws/openclaw";
     const bridgeAgentId = process.env.BRIDGE_OPENCLAW_AGENT_ID ?? "main";
-    const bridgeMode = (process.env.BRIDGE_MODE ?? "legacy-cli").trim().toLowerCase();
     const channelPostUrl = process.env.SSE_CHANNEL_POST_URL ?? "";
     const defaultTo = process.env.SSE_CHANNEL_DEFAULT_TO ?? "";
 
@@ -258,68 +170,10 @@ const plugin = {
 
     client.connect({
       wsUrl,
-      secret,
-      openclawId,
       onStatus: (status) => {
         api.logger.info?.(`[${PLUGIN_ID}] bridge status=${status}`);
       },
       onMessage: (msg) => {
-        const systemEvent = toInboundSystemEvent(msg);
-        if (systemEvent) {
-          const text = asString(systemEvent.payload?.text) ?? "";
-          if (!text) {
-            if (systemEvent.request_id) {
-              sendError(
-                systemEvent.request_id,
-                systemEvent.session_key,
-                "bad_request",
-                "payload.text is required for system.event",
-              );
-            }
-            return;
-          }
-
-          const contextKey =
-            asString(systemEvent.payload?.context_key) ??
-            `bridge:${systemEvent.request_id ?? Date.now().toString()}`;
-          const wakeReason = asString(systemEvent.payload?.reason) ?? "bridge:system-event";
-          const upstreamSessionKey = `agent:${bridgeAgentId}:${systemEvent.session_key}`;
-          const ok = api.runtime.system.enqueueSystemEvent(text, {
-            sessionKey: upstreamSessionKey,
-            contextKey,
-          });
-          if (!ok) {
-            if (systemEvent.request_id) {
-              sendError(
-                systemEvent.request_id,
-                systemEvent.session_key,
-                "enqueue_failed",
-                "failed to enqueue system event",
-              );
-            }
-            return;
-          }
-
-          api.runtime.system.requestHeartbeatNow({
-            sessionKey: upstreamSessionKey,
-            reason: wakeReason,
-            agentId: bridgeAgentId,
-          });
-
-          if (systemEvent.request_id) {
-            client.send({
-              type: "assistant.done",
-              request_id: systemEvent.request_id,
-              session_key: systemEvent.session_key,
-              payload: {
-                accepted: true,
-                mode: "heartbeat",
-              },
-            });
-          }
-          return;
-        }
-
         const inbound = toInboundUserMessage(msg);
         if (!inbound) return;
 
@@ -330,205 +184,138 @@ const plugin = {
           return;
         }
 
-        const sessionId = normalizeSessionId(`${bridgeAgentId}_${sessionKey}`);
-
         void (async () => {
           api.runtime.log?.(
             "info",
-            `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey} mode=${bridgeMode}`,
+            `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey}`,
           );
 
-          const runLegacyCli = async () => {
-            const cmd = buildAgentCommand([
-              "agent",
-              "--agent",
-              bridgeAgentId,
-              "--session-id",
-              sessionId,
-              "--message",
-              userText,
-              "--timeout",
-              String(OPENCLAW_AGENT_TIMEOUT_SEC),
-              "--json",
-            ]);
-
-            const result = await api.runtime.system.runCommandWithTimeout(cmd, {
-              timeoutMs: REQUEST_TIMEOUT_MS,
+          let delivered = false;
+          let lastSentText = "";
+          try {
+            const route = api.runtime.channel.routing.resolveAgentRoute({
+              cfg: api.config,
+              channel: CHANNEL_ID,
+              accountId: "default",
+              peer: { kind: "direct", id: sessionKey },
             });
+
+            const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
+              Body: userText,
+              RawBody: userText,
+              CommandBody: userText,
+              From: `sse_bridge:${asString(inbound.payload?.sender_id) ?? "unknown"}`,
+              To: `sse_bridge:${sessionKey}`,
+              SessionKey: route.sessionKey,
+              AccountId: route.accountId,
+              ChatType: "direct",
+              ConversationLabel: sessionKey,
+              SenderId: asString(inbound.payload?.sender_id) ?? undefined,
+              MessageSid: asString(inbound.payload?.message_id) ?? inbound.request_id,
+              Timestamp: Date.now(),
+              Provider: CHANNEL_ID,
+              Surface: CHANNEL_ID,
+              OriginatingChannel: CHANNEL_ID,
+              OriginatingTo: sessionKey,
+              CommandAuthorized: true,
+            });
+
+            const dispatchStart = Date.now();
+            api.runtime.log?.(
+              "info",
+              `[${PLUGIN_ID}] dispatch start request_id=${inbound.request_id} session_key=${sessionKey}`,
+            );
+
+            await Promise.race([
+              api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+                ctx: ctxPayload,
+                cfg: api.config,
+                dispatcherOptions: {
+                  deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
+                    const text = payload.text ?? "";
+                    api.runtime.log?.(
+                      "info",
+                      `[${PLUGIN_ID}] deliver request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} text_len=${text.length}`,
+                    );
+                    if (!text) return;
+
+                    let toSend = "";
+                    if (text.startsWith(lastSentText)) {
+                      toSend = text.slice(lastSentText.length);
+                    } else if (lastSentText.startsWith(text)) {
+                      toSend = "";
+                    } else {
+                      toSend = text;
+                    }
+
+                    if (!toSend) return;
+                    delivered = true;
+                    lastSentText = text;
+                    client.send({
+                      type: "assistant.delta",
+                      request_id: inbound.request_id,
+                      session_key: sessionKey,
+                      payload: { text: toSend },
+                    });
+                  },
+                  onSkip: (payload: { text?: string }, info: { kind?: string; reason?: string }) => {
+                    api.runtime.log?.(
+                      "warn",
+                      `[${PLUGIN_ID}] skip request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} reason=${info?.reason ?? "unknown"} text_len=${(payload?.text ?? "").length}`,
+                    );
+                  },
+                  onError: (err: unknown, info: { kind?: string }) => {
+                    api.runtime.log?.(
+                      "warn",
+                      `[${PLUGIN_ID}] dispatcher error request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} err=${String(err)}`,
+                    );
+                    throw new Error(`${info.kind}: ${String(err)}`);
+                  },
+                },
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("channel-inbound timeout")), REQUEST_TIMEOUT_MS),
+              ),
+            ]);
 
             api.runtime.log?.(
               "info",
-              `[${PLUGIN_ID}] cmd result request_id=${inbound.request_id} code=${result.code} stdout_len=${result.stdout.length} stderr_len=${result.stderr.length}`,
+              `[${PLUGIN_ID}] dispatch done request_id=${inbound.request_id} elapsed_ms=${Date.now() - dispatchStart} delivered=${delivered}`,
             );
-
-            if (result.code !== 0) {
-              const detail = (result.stderr || result.stdout || "openclaw agent failed").trim();
-              sendError(inbound.request_id, sessionKey, "upstream_error", detail.slice(0, 800));
-              return;
-            }
-
-            const parsed = parseJsonFromStdout(result.stdout);
-            const replyText = extractReplyText(parsed);
-            if (replyText) {
-              client.send({
-                type: "assistant.delta",
-                request_id: inbound.request_id,
-                session_key: sessionKey,
-                payload: { text: replyText },
-              });
-            }
-
-            const usage = parsed?.result?.meta?.agentMeta?.usage ?? {};
-            const latencyMs = parsed?.result?.meta?.durationMs;
-            client.send({
-              type: "assistant.done",
-              request_id: inbound.request_id,
-              session_key: sessionKey,
-              payload: { usage, latency_ms: latencyMs },
-            });
-          };
-
-          if (bridgeMode === "channel-inbound") {
-            let delivered = false;
-            let lastSentText = "";
-            try {
-              const route = api.runtime.channel.routing.resolveAgentRoute({
-                cfg: api.config,
-                channel: CHANNEL_ID,
-                accountId: "default",
-                peer: { kind: "direct", id: sessionKey },
-              });
-
-              const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
-                Body: userText,
-                RawBody: userText,
-                CommandBody: userText,
-                From: `sse_bridge:${asString(inbound.payload?.sender_id) ?? "unknown"}`,
-                To: `sse_bridge:${sessionKey}`,
-                SessionKey: route.sessionKey,
-                AccountId: route.accountId,
-                ChatType: "direct",
-                ConversationLabel: sessionKey,
-                SenderId: asString(inbound.payload?.sender_id) ?? undefined,
-                MessageSid: asString(inbound.payload?.message_id) ?? inbound.request_id,
-                Timestamp: Date.now(),
-                Provider: CHANNEL_ID,
-                Surface: CHANNEL_ID,
-                OriginatingChannel: CHANNEL_ID,
-                OriginatingTo: sessionKey,
-                CommandAuthorized: true,
-              });
-
-              const dispatchStart = Date.now();
-              api.runtime.log?.(
-                "info",
-                `[${PLUGIN_ID}] channel-inbound dispatch start request_id=${inbound.request_id} session_key=${sessionKey}`,
-              );
-
-              await Promise.race([
-                api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-                  ctx: ctxPayload,
-                  cfg: api.config,
-                  dispatcherOptions: {
-                    deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
-                      const text = payload.text ?? "";
-                      api.runtime.log?.(
-                        "info",
-                        `[${PLUGIN_ID}] channel-inbound deliver request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} text_len=${text.length}`,
-                      );
-                      if (!text) return;
-
-                      let toSend = "";
-                      if (text.startsWith(lastSentText)) {
-                        toSend = text.slice(lastSentText.length);
-                      } else if (lastSentText.startsWith(text)) {
-                        toSend = "";
-                      } else {
-                        toSend = text;
-                      }
-
-                      if (!toSend) return;
-                      delivered = true;
-                      lastSentText = text;
-                      client.send({
-                        type: "assistant.delta",
-                        request_id: inbound.request_id,
-                        session_key: sessionKey,
-                        payload: { text: toSend },
-                      });
-                    },
-                    onSkip: (payload: { text?: string }, info: { kind?: string; reason?: string }) => {
-                      api.runtime.log?.(
-                        "warn",
-                        `[${PLUGIN_ID}] channel-inbound skip request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} reason=${info?.reason ?? "unknown"} text_len=${(payload?.text ?? "").length}`,
-                      );
-                    },
-                    onError: (err: unknown, info: { kind?: string }) => {
-                      api.runtime.log?.(
-                        "warn",
-                        `[${PLUGIN_ID}] channel-inbound dispatcher error request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} err=${String(err)}`,
-                      );
-                      throw new Error(`${info.kind}: ${String(err)}`);
-                    },
-                  },
-                }),
-                new Promise((_, reject) =>
-                  setTimeout(() => reject(new Error("channel-inbound timeout")), REQUEST_TIMEOUT_MS),
-                ),
-              ]);
-
-              api.runtime.log?.(
-                "info",
-                `[${PLUGIN_ID}] channel-inbound dispatch done request_id=${inbound.request_id} elapsed_ms=${Date.now() - dispatchStart} delivered=${delivered}`,
-              );
-            } catch (err) {
-              api.runtime.log?.(
-                "warn",
-                `[${PLUGIN_ID}] channel-inbound failed request_id=${inbound.request_id}: ${String(err)}`,
-              );
-              sendError(
-                inbound.request_id,
-                sessionKey,
-                "upstream_error",
-                `channel-inbound failed: ${String(err)}`.slice(0, 800),
-              );
-              return;
-            }
-
-            if (!delivered) {
-              api.runtime.log?.(
-                "warn",
-                `[${PLUGIN_ID}] channel-inbound no output request_id=${inbound.request_id}`,
-              );
-              sendError(
-                inbound.request_id,
-                sessionKey,
-                "upstream_empty",
-                "channel-inbound returned no text payload",
-              );
-              return;
-            }
-
-            client.send({
-              type: "assistant.done",
-              request_id: inbound.request_id,
-              session_key: sessionKey,
-              payload: {},
-            });
-            return;
-          }
-
-          if (bridgeMode !== "legacy-cli") {
+          } catch (err) {
+            api.runtime.log?.(
+              "warn",
+              `[${PLUGIN_ID}] failed request_id=${inbound.request_id}: ${String(err)}`,
+            );
             sendError(
               inbound.request_id,
               sessionKey,
-              "unsupported_mode",
-              `bridge mode '${bridgeMode}' is not implemented`,
+              "upstream_error",
+              `channel-inbound failed: ${String(err)}`.slice(0, 800),
             );
             return;
           }
 
-          await runLegacyCli();
+          if (!delivered) {
+            api.runtime.log?.(
+              "warn",
+              `[${PLUGIN_ID}] no output request_id=${inbound.request_id}`,
+            );
+            sendError(
+              inbound.request_id,
+              sessionKey,
+              "upstream_empty",
+              "channel-inbound returned no text payload",
+            );
+            return;
+          }
+
+          client.send({
+            type: "assistant.done",
+            request_id: inbound.request_id,
+            session_key: sessionKey,
+            payload: {},
+          });
         })().catch((err: unknown) => {
           sendError(
             inbound.request_id,
@@ -542,7 +329,7 @@ const plugin = {
 
     api.runtime.log?.(
       "info",
-      `[${PLUGIN_ID}] reverse WS bridge started: ${wsUrl} mode=${bridgeMode} reqTimeoutMs=${REQUEST_TIMEOUT_MS} agentTimeoutSec=${OPENCLAW_AGENT_TIMEOUT_SEC}`,
+      `[${PLUGIN_ID}] reverse WS bridge started: ${wsUrl} reqTimeoutMs=${REQUEST_TIMEOUT_MS}`,
     );
   },
 };

@@ -1,35 +1,30 @@
 # SSE + WS Bridge Workspace
 
-This repository is intentionally minimized to two parts:
-- `apps/python-gateway` (FastAPI + uv)
-- `plugins/ts-openclaw-channel` (OpenClaw plugin + npm)
+- `apps/python-gateway` — FastAPI SSE gateway (Python + uv)
+- `plugins/ts-openclaw-channel` — OpenClaw channel plugin (TypeScript + npm)
 
-## Documentation
+## Quick start
 
-- End-to-end guide (CN): `docs/sse-bridge-cron-guide.zh-CN.md`
-- Python gateway details: `apps/python-gateway/README.md`
-- Plugin details: `plugins/ts-openclaw-channel/README.md`
-- One-click plugin install: `scripts/install-openclaw-plugin.sh`
+```bash
+cd apps/python-gateway
+uv venv && source .venv/bin/activate
+uv pip install -e '.[dev]'
+cp .env.example .env
+uv run uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+```
 
-## One-command smoke check
+## Plugin install
 
-From repo root:
+```bash
+./scripts/install-openclaw-plugin.sh
+```
+
+## Smoke test
 
 ```bash
 ./scripts/smoke.sh
 ```
 
-It will:
-1. Run Python tests, including end-to-end SSE over reverse WebSocket flow.
-2. Run plugin manifest/type checks.
-3. Clean plugin `node_modules` after checks.
+## Docs
 
-## Manual run (gateway)
-
-```bash
-cd apps/python-gateway
-uv venv
-source .venv/bin/activate
-uv pip install -e '.[dev]'
-uv run uvicorn main:app --host 127.0.0.1 --port 8010 --reload
-```
+- 完整说明: `docs/sse-bridge-cron-guide.zh-CN.md`

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import WebSocket from "ws";
 
 export type OutboundMessage = {
@@ -9,56 +8,27 @@ export type OutboundMessage = {
   payload?: Record<string, unknown>;
 };
 
-function sha256Hex(input: Buffer | string): string {
-  return crypto.createHash("sha256").update(input).digest("hex");
-}
-
-function hmacHex(secret: string, payload: string): string {
-  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
-}
-
-function signHeaders(params: { method: string; path: string; secret: string; openclawId: string }) {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = crypto.randomUUID();
-  const bodyHash = sha256Hex("");
-  const payload = [params.method.toUpperCase(), params.path, timestamp, nonce, bodyHash].join("\n");
-  const signature = hmacHex(params.secret, payload);
-
-  return {
-    "x-openclaw-id": params.openclawId,
-    "x-timestamp": timestamp,
-    "x-nonce": nonce,
-    "x-signature": signature,
-  };
-}
-
 export class BridgeClient {
   private ws: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private shouldReconnect = false;
   private reconnectAttempts = 0;
   private connectParams:
-    | { wsUrl: string; secret: string; openclawId: string; onMessage: (msg: unknown) => void; onStatus?: (status: string) => void }
+    | { wsUrl: string; onMessage: (msg: unknown) => void; onStatus?: (status: string) => void }
     | null = null;
 
   connect(params: {
     wsUrl: string;
-    secret: string;
-    openclawId: string;
     onMessage: (msg: unknown) => void;
     onStatus?: (status: string) => void;
   }) {
     this.connectParams = params;
     this.shouldReconnect = true;
-    const url = new URL(params.wsUrl);
-    const headers = signHeaders({
-      method: "GET",
-      path: url.pathname,
-      secret: params.secret,
-      openclawId: params.openclawId,
+    this.ws = new WebSocket(params.wsUrl, {
+      headers: {
+        "x-openclaw-id": "openclaw-local",
+      },
     });
-
-    this.ws = new WebSocket(params.wsUrl, { headers });
 
     this.ws.on("open", () => {
       this.reconnectAttempts = 0;
@@ -69,13 +39,19 @@ export class BridgeClient {
 
     this.ws.on("message", (buf) => {
       try {
-        params.onMessage(JSON.parse(buf.toString()));
+        const msg = JSON.parse(buf.toString());
+        if (msg.type === "ping") {
+          this.ws?.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
+        params.onMessage(msg);
       } catch {
         params.onMessage({ type: "malformed" });
       }
     });
 
-    this.ws.on("error", () => {
+    this.ws.on("error", (err) => {
+      console.error("[bridge-client] ws error:", err);
       params.onStatus?.("error");
     });
 
