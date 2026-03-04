@@ -1,8 +1,4 @@
-import {
-  createNormalizedOutboundDeliverer,
-  createReplyPrefixOptions,
-  type OpenClawPluginApi,
-} from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { BridgeClient } from "./src/bridge-client.js";
 
 const PLUGIN_ID = "ts-openclaw-channel";
@@ -370,30 +366,20 @@ const plugin = {
               CommandAuthorized: true,
             });
 
-            const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
-              cfg: api.config,
-              agentId: route.agentId,
-              channel: CHANNEL_ID,
-              accountId: route.accountId,
-            });
-
-            const deliverReply = createNormalizedOutboundDeliverer(async (payload: { text?: string }) => {
-              const text = payload.text?.trim();
-              if (!text) return;
-              client.send({
-                type: "assistant.delta",
-                request_id: inbound.request_id,
-                session_key: sessionKey,
-                payload: { text },
-              });
-            });
-
             await api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
               ctx: ctxPayload,
               cfg: api.config,
               dispatcherOptions: {
-                ...prefixOptions,
-                deliver: deliverReply,
+                deliver: async (payload: { text?: string }) => {
+                  const text = payload.text?.trim();
+                  if (!text) return;
+                  client.send({
+                    type: "assistant.delta",
+                    request_id: inbound.request_id,
+                    session_key: sessionKey,
+                    payload: { text },
+                  });
+                },
                 onError: (err: unknown, info: { kind?: string }) => {
                   sendError(
                     inbound.request_id,
@@ -402,9 +388,6 @@ const plugin = {
                     `${info.kind}: ${String(err)}`.slice(0, 800),
                   );
                 },
-              },
-              replyOptions: {
-                onModelSelected,
               },
             });
 
