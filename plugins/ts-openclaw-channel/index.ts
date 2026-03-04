@@ -338,58 +338,128 @@ const plugin = {
             `[${PLUGIN_ID}] inbound request_id=${inbound.request_id} session_key=${sessionKey} mode=${bridgeMode}`,
           );
 
+          const runLegacyCli = async () => {
+            const cmd = buildAgentCommand([
+              "agent",
+              "--agent",
+              bridgeAgentId,
+              "--session-id",
+              sessionId,
+              "--message",
+              userText,
+              "--timeout",
+              String(OPENCLAW_AGENT_TIMEOUT_SEC),
+              "--json",
+            ]);
+
+            const result = await api.runtime.system.runCommandWithTimeout(cmd, {
+              timeoutMs: REQUEST_TIMEOUT_MS,
+            });
+
+            api.runtime.log?.(
+              "info",
+              `[${PLUGIN_ID}] cmd result request_id=${inbound.request_id} code=${result.code} stdout_len=${result.stdout.length} stderr_len=${result.stderr.length}`,
+            );
+
+            if (result.code !== 0) {
+              const detail = (result.stderr || result.stdout || "openclaw agent failed").trim();
+              sendError(inbound.request_id, sessionKey, "upstream_error", detail.slice(0, 800));
+              return;
+            }
+
+            const parsed = parseJsonFromStdout(result.stdout);
+            const replyText = extractReplyText(parsed);
+            if (replyText) {
+              client.send({
+                type: "assistant.delta",
+                request_id: inbound.request_id,
+                session_key: sessionKey,
+                payload: { text: replyText },
+              });
+            }
+
+            const usage = parsed?.result?.meta?.agentMeta?.usage ?? {};
+            const latencyMs = parsed?.result?.meta?.durationMs;
+            client.send({
+              type: "assistant.done",
+              request_id: inbound.request_id,
+              session_key: sessionKey,
+              payload: { usage, latency_ms: latencyMs },
+            });
+          };
+
           if (bridgeMode === "channel-inbound") {
-            const route = api.runtime.channel.routing.resolveAgentRoute({
-              cfg: api.config,
-              channel: CHANNEL_ID,
-              accountId: "default",
-              peer: { kind: "direct", id: sessionKey },
-            });
+            let delivered = false;
+            try {
+              const route = api.runtime.channel.routing.resolveAgentRoute({
+                cfg: api.config,
+                channel: CHANNEL_ID,
+                accountId: "default",
+                peer: { kind: "direct", id: sessionKey },
+              });
 
-            const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
-              Body: userText,
-              RawBody: userText,
-              CommandBody: userText,
-              From: `sse_bridge:${asString(inbound.payload?.sender_id) ?? "unknown"}`,
-              To: `sse_bridge:${sessionKey}`,
-              SessionKey: route.sessionKey,
-              AccountId: route.accountId,
-              ChatType: "direct",
-              ConversationLabel: sessionKey,
-              SenderId: asString(inbound.payload?.sender_id) ?? undefined,
-              MessageSid: asString(inbound.payload?.message_id) ?? inbound.request_id,
-              Timestamp: Date.now(),
-              Provider: CHANNEL_ID,
-              Surface: CHANNEL_ID,
-              OriginatingChannel: CHANNEL_ID,
-              OriginatingTo: sessionKey,
-              CommandAuthorized: true,
-            });
+              const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
+                Body: userText,
+                RawBody: userText,
+                CommandBody: userText,
+                From: `sse_bridge:${asString(inbound.payload?.sender_id) ?? "unknown"}`,
+                To: `sse_bridge:${sessionKey}`,
+                SessionKey: route.sessionKey,
+                AccountId: route.accountId,
+                ChatType: "direct",
+                ConversationLabel: sessionKey,
+                SenderId: asString(inbound.payload?.sender_id) ?? undefined,
+                MessageSid: asString(inbound.payload?.message_id) ?? inbound.request_id,
+                Timestamp: Date.now(),
+                Provider: CHANNEL_ID,
+                Surface: CHANNEL_ID,
+                OriginatingChannel: CHANNEL_ID,
+                OriginatingTo: sessionKey,
+                CommandAuthorized: true,
+              });
 
-            await api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
-              ctx: ctxPayload,
-              cfg: api.config,
-              dispatcherOptions: {
-                deliver: async (payload: { text?: string }) => {
-                  const text = payload.text?.trim();
-                  if (!text) return;
-                  client.send({
-                    type: "assistant.delta",
-                    request_id: inbound.request_id,
-                    session_key: sessionKey,
-                    payload: { text },
-                  });
-                },
-                onError: (err: unknown, info: { kind?: string }) => {
-                  sendError(
-                    inbound.request_id,
-                    sessionKey,
-                    "upstream_error",
-                    `${info.kind}: ${String(err)}`.slice(0, 800),
-                  );
-                },
-              },
-            });
+              await Promise.race([
+                api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+                  ctx: ctxPayload,
+                  cfg: api.config,
+                  dispatcherOptions: {
+                    deliver: async (payload: { text?: string }) => {
+                      const text = payload.text?.trim();
+                      if (!text) return;
+                      delivered = true;
+                      client.send({
+                        type: "assistant.delta",
+                        request_id: inbound.request_id,
+                        session_key: sessionKey,
+                        payload: { text },
+                      });
+                    },
+                    onError: (err: unknown, info: { kind?: string }) => {
+                      throw new Error(`${info.kind}: ${String(err)}`);
+                    },
+                  },
+                }),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error("channel-inbound timeout")), REQUEST_TIMEOUT_MS),
+                ),
+              ]);
+            } catch (err) {
+              api.runtime.log?.(
+                "warn",
+                `[${PLUGIN_ID}] channel-inbound failed request_id=${inbound.request_id}, fallback legacy-cli: ${String(err)}`,
+              );
+              await runLegacyCli();
+              return;
+            }
+
+            if (!delivered) {
+              api.runtime.log?.(
+                "warn",
+                `[${PLUGIN_ID}] channel-inbound no output request_id=${inbound.request_id}, fallback legacy-cli`,
+              );
+              await runLegacyCli();
+              return;
+            }
 
             client.send({
               type: "assistant.done",
@@ -410,53 +480,7 @@ const plugin = {
             return;
           }
 
-          const cmd = buildAgentCommand([
-            "agent",
-            "--agent",
-            bridgeAgentId,
-            "--session-id",
-            sessionId,
-            "--message",
-            userText,
-            "--timeout",
-            String(OPENCLAW_AGENT_TIMEOUT_SEC),
-            "--json",
-          ]);
-
-          const result = await api.runtime.system.runCommandWithTimeout(cmd, {
-            timeoutMs: REQUEST_TIMEOUT_MS,
-          });
-
-          api.runtime.log?.(
-            "info",
-            `[${PLUGIN_ID}] cmd result request_id=${inbound.request_id} code=${result.code} stdout_len=${result.stdout.length} stderr_len=${result.stderr.length}`,
-          );
-
-          if (result.code !== 0) {
-            const detail = (result.stderr || result.stdout || "openclaw agent failed").trim();
-            sendError(inbound.request_id, sessionKey, "upstream_error", detail.slice(0, 800));
-            return;
-          }
-
-          const parsed = parseJsonFromStdout(result.stdout);
-          const replyText = extractReplyText(parsed);
-          if (replyText) {
-            client.send({
-              type: "assistant.delta",
-              request_id: inbound.request_id,
-              session_key: sessionKey,
-              payload: { text: replyText },
-            });
-          }
-
-          const usage = parsed?.result?.meta?.agentMeta?.usage ?? {};
-          const latencyMs = parsed?.result?.meta?.durationMs;
-          client.send({
-            type: "assistant.done",
-            request_id: inbound.request_id,
-            session_key: sessionKey,
-            payload: { usage, latency_ms: latencyMs },
-          });
+          await runLegacyCli();
         })().catch((err: unknown) => {
           sendError(
             inbound.request_id,
