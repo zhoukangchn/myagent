@@ -390,6 +390,7 @@ const plugin = {
 
           if (bridgeMode === "channel-inbound") {
             let delivered = false;
+            let lastSentText = "";
             try {
               const route = api.runtime.channel.routing.resolveAgentRoute({
                 cfg: api.config,
@@ -424,15 +425,26 @@ const plugin = {
                   cfg: api.config,
                   dispatcherOptions: {
                     deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
-                      if (info?.kind && info.kind !== "final") return;
-                      const text = payload.text?.trim();
+                      const text = payload.text ?? "";
                       if (!text) return;
+
+                      let toSend = "";
+                      if (text.startsWith(lastSentText)) {
+                        toSend = text.slice(lastSentText.length);
+                      } else if (lastSentText.startsWith(text)) {
+                        toSend = "";
+                      } else {
+                        toSend = text;
+                      }
+
+                      if (!toSend) return;
                       delivered = true;
+                      lastSentText = text;
                       client.send({
                         type: "assistant.delta",
                         request_id: inbound.request_id,
                         session_key: sessionKey,
-                        payload: { text },
+                        payload: { text: toSend },
                       });
                     },
                     onError: (err: unknown, info: { kind?: string }) => {
