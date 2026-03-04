@@ -8,7 +8,7 @@ OpenClaw channel plugin:
 ## Required env vars
 
 - `OPENCLAW_SHARED_SECRET`
-- `SSE_CHANNEL_POST_URL` — outbound POST target
+- `SSE_CHANNEL_POST_URL` — outbound POST target (default: `http://127.0.0.1:8010/v1/channel/post`)
 
 ## Optional env vars
 

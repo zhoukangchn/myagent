@@ -3,6 +3,7 @@
 FastAPI service:
 - `POST /v1/chat/stream` — SSE streaming for chat clients
 - `GET /v1/ws/openclaw` — reverse WebSocket from OpenClaw plugin
+- `POST /v1/channel/post` — OpenClaw channel outbound callback (cron/subagent announce)
 
 ## Run
 
@@ -22,6 +23,9 @@ Default bind: `0.0.0.0:8010` (via `.env`).
 
 ### OpenClaw → Gateway (`GET /v1/ws/openclaw`)
 `x-openclaw-id`, `x-timestamp`, `x-nonce`, `x-signature`
+
+### OpenClaw Channel Outbound → Gateway (`POST /v1/channel/post`)
+No signature check in current implementation (local relay stub).
 
 ## Signature
 

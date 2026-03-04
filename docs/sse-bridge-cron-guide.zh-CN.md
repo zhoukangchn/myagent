@@ -116,7 +116,7 @@ export BRIDGE_WS_URL='ws://127.0.0.1:8010/v1/ws/openclaw'
 export OPENCLAW_SHARED_SECRET='dev-openclaw-secret'
 export OPENCLAW_ID='openclaw-local'
 
-export SSE_CHANNEL_POST_URL='http://127.0.0.1:9000/mock'
+export SSE_CHANNEL_POST_URL='http://127.0.0.1:8010/v1/channel/post'
 export SSE_CHANNEL_DEFAULT_TO='cron-demo:thread-1'
 ```
 
@@ -146,26 +146,9 @@ openclaw gateway run
 
 ## 6. Cron 推送实测步骤
 
-### 6.1 启动一个本地 mock 接口（模拟聊天软件 post 接口）
+### 6.1 确认 Python Gateway 已启动
 
-```bash
-cat > /tmp/mock_receiver.py <<'PY'
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-class H(BaseHTTPRequestHandler):
-    def do_POST(self):
-        l = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(l).decode("utf-8", "replace")
-        print(body, flush=True)
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"ok")
-
-HTTPServer(("127.0.0.1", 9000), H).serve_forever()
-PY
-
-python /tmp/mock_receiver.py
-```
+`SSE_CHANNEL_POST_URL` 默认指向 `POST /v1/channel/post`，因此无需额外 mock 服务。
 
 ### 6.2 新增并执行 cron
 
@@ -188,7 +171,11 @@ openclaw cron run <job_id> --timeout 90000
 
 预期：
 - 命令返回 `{"ok": true, "ran": true}`
-- mock 接口收到 JSON，包含：
+- Python Gateway 日志中出现：
+  - `channel_post received source=openclaw-cron-delivery ...`
+- `POST /v1/channel/post` 接口返回：
+  - `{"ok": true, "accepted": true, "forwarded": false}`
+- 回调 payload 包含：
   - `chat_id`
   - `thread_id`
   - `content`
