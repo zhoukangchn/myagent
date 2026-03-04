@@ -11,6 +11,20 @@ function resolveOpenclawCmd(): string {
   return process.platform === "win32" ? "openclaw.cmd" : "openclaw";
 }
 
+function quoteCmdArg(arg: string): string {
+  if (!arg) return '""';
+  if (!/[\s"^&|<>]/.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '""')}"`;
+}
+
+function buildAgentCommand(args: string[]): string[] {
+  const cmd = resolveOpenclawCmd();
+  if (process.platform !== "win32") return [cmd, ...args];
+
+  const commandLine = [cmd, ...args].map(quoteCmdArg).join(" ");
+  return ["cmd.exe", "/d", "/s", "/c", commandLine];
+}
+
 type InboundUserMessage = {
   type: "user.message";
   request_id: string;
@@ -308,8 +322,7 @@ const plugin = {
         const sessionId = normalizeSessionId(`${bridgeAgentId}_${sessionKey}`);
 
         void (async () => {
-          const cmd = [
-            resolveOpenclawCmd(),
+          const cmd = buildAgentCommand([
             "agent",
             "--agent",
             bridgeAgentId,
@@ -318,7 +331,7 @@ const plugin = {
             "--message",
             userText,
             "--json",
-          ];
+          ]);
 
           const result = await api.runtime.system.runCommandWithTimeout(cmd, {
             timeoutMs: REQUEST_TIMEOUT_MS,
