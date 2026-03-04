@@ -446,18 +446,28 @@ const plugin = {
             } catch (err) {
               api.runtime.log?.(
                 "warn",
-                `[${PLUGIN_ID}] channel-inbound failed request_id=${inbound.request_id}, fallback legacy-cli: ${String(err)}`,
+                `[${PLUGIN_ID}] channel-inbound failed request_id=${inbound.request_id}: ${String(err)}`,
               );
-              await runLegacyCli();
+              sendError(
+                inbound.request_id,
+                sessionKey,
+                "upstream_error",
+                `channel-inbound failed: ${String(err)}`.slice(0, 800),
+              );
               return;
             }
 
             if (!delivered) {
               api.runtime.log?.(
                 "warn",
-                `[${PLUGIN_ID}] channel-inbound no output request_id=${inbound.request_id}, fallback legacy-cli`,
+                `[${PLUGIN_ID}] channel-inbound no output request_id=${inbound.request_id}`,
               );
-              await runLegacyCli();
+              sendError(
+                inbound.request_id,
+                sessionKey,
+                "upstream_timeout",
+                "channel-inbound produced no output",
+              );
               return;
             }
 
