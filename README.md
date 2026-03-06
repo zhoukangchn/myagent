@@ -8,9 +8,9 @@
 ```bash
 cd apps/python-gateway
 uv venv && source .venv/bin/activate
-uv pip install -e '.[dev]'
+uv sync --extra dev --no-install-project
 cp .env.example .env
-uv run uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+PYTHONPATH=src uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Plugin install

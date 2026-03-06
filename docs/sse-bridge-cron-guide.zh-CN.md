@@ -35,7 +35,7 @@ cd apps/python-gateway
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install -e '.[dev]'
+uv sync --extra dev --no-install-project
 cp .env.example .env
 ```
 
@@ -43,7 +43,7 @@ cp .env.example .env
 
 ```dotenv
 BRIDGE_BIND_HOST=0.0.0.0
-BRIDGE_BIND_PORT=8010
+BRIDGE_BIND_PORT=8000
 
 CHAT_SHARED_SECRET=dev-chat-secret
 OPENCLAW_SHARED_SECRET=dev-openclaw-secret
@@ -52,12 +52,12 @@ OPENCLAW_SHARED_SECRET=dev-openclaw-secret
 启动：
 
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+PYTHONPATH=src uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 说明：
 - `OPENCLAW_SHARED_SECRET` 必须与 OpenClaw 侧一致。
-- 默认遵循 FastAPI 常见启动方式；也可 `uv run python -m gateway`。
+- 这里不安装本地项目包，避免生成 `.egg-info`；因此启动时显式加上 `PYTHONPATH=src`。
 
 ## 4. OpenClaw 插件安装与环境变量
 
@@ -112,11 +112,11 @@ openclaw plugins uninstall ts-openclaw-channel
 启动 OpenClaw 网关前设置环境变量（示例）：
 
 ```bash
-export BRIDGE_WS_URL='ws://127.0.0.1:8010/v1/ws/openclaw'
+export BRIDGE_WS_URL='ws://127.0.0.1:8000/v1/ws/openclaw'
 export OPENCLAW_SHARED_SECRET='dev-openclaw-secret'
 export OPENCLAW_ID='openclaw-local'
 
-export SSE_CHANNEL_POST_URL='http://127.0.0.1:8010/v1/channel/post'
+export SSE_CHANNEL_POST_URL='http://127.0.0.1:8000/v1/channel/post'
 export SSE_CHANNEL_DEFAULT_TO='cron-demo:thread-1'
 ```
 

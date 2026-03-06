@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT/apps/python-gateway"
-uv run --extra dev pytest -q
+uv sync --extra dev --no-install-project
+PYTHONPATH=src .venv/bin/pytest tests/ -q
 
 cd "$ROOT/plugins/ts-openclaw-channel"
 npm install --silent

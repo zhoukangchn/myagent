@@ -7,7 +7,7 @@ def test_settings_defaults():
     get_settings.cache_clear()
     cfg = get_settings()
     assert cfg.bind_host == "0.0.0.0"
-    assert cfg.bind_port == 8010
+    assert cfg.bind_port == 8000
     assert cfg.outbound_push_url == ""
     assert cfg.outbound_push_timeout_sec == 5
     assert cfg.outbound_push_retry == 0

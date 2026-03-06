@@ -8,13 +8,13 @@ OpenClaw channel plugin:
 ## Required env vars
 
 - `OPENCLAW_SHARED_SECRET`
-- `SSE_CHANNEL_POST_URL` — outbound POST target (default: `http://127.0.0.1:8010/v1/channel/post`)
+- `SSE_CHANNEL_POST_URL` — outbound POST target (default: `http://127.0.0.1:8000/v1/channel/post`)
 
 ## Optional env vars
 
 | Variable | Default | Description |
 |---|---|---|
-| `BRIDGE_WS_URL` | `ws://127.0.0.1:8010/v1/ws/openclaw` | Gateway WS URL |
+| `BRIDGE_WS_URL` | `ws://127.0.0.1:8000/v1/ws/openclaw` | Gateway WS URL |
 | `OPENCLAW_ID` | `openclaw-local` | OpenClaw instance ID |
 | `BRIDGE_OPENCLAW_AGENT_ID` | `main` | Agent ID for routing |
 | `BRIDGE_REQUEST_TIMEOUT_MS` | `120000` | Request timeout |

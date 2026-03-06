@@ -92,7 +92,7 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     const wsUrl = process.env.BRIDGE_WS_URL ?? "ws://127.0.0.1:8000/v1/ws/openclaw";
     const bridgeAgentId = process.env.BRIDGE_OPENCLAW_AGENT_ID ?? "main";
-    const channelPostUrl = process.env.SSE_CHANNEL_POST_URL ?? "http://127.0.0.1:8010/v1/channel/post";
+    const channelPostUrl = process.env.SSE_CHANNEL_POST_URL ?? "http://127.0.0.1:8000/v1/channel/post";
     const defaultTo = process.env.SSE_CHANNEL_DEFAULT_TO ?? "";
 
     const client = new BridgeClient();

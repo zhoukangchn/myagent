@@ -9,12 +9,12 @@ FastAPI service:
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install -e '.[dev]'
+uv sync --extra dev --no-install-project
 cp .env.example .env
-uv run uvicorn main:app --reload
+PYTHONPATH=src uvicorn main:app --reload
 ```
 
-Default bind: `0.0.0.0:8010` (via `.env`).
+Default bind: `0.0.0.0:8000` (via `.env`). `PYTHONPATH=src` keeps local imports working without installing the project package.
 
 ## Required headers
 
