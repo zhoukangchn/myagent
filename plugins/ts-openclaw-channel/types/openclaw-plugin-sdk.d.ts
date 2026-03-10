@@ -5,6 +5,13 @@ declare module "openclaw/plugin-sdk" {
     channel: string;
     accountId?: string;
   }): { onModelSelected?: (...args: unknown[]) => void; [key: string]: unknown };
+  export function dispatchReplyFromConfigWithSettledDispatcher(params: {
+    cfg: unknown;
+    ctxPayload: Record<string, unknown>;
+    dispatcher: unknown;
+    onSettled: () => void | Promise<void>;
+    replyOptions?: Record<string, unknown>;
+  }): Promise<{ counts: Record<string, number>; queuedFinal?: boolean }>;
 
   export interface OpenClawPluginApi {
     config: unknown;
