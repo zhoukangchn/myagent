@@ -1,8 +1,4 @@
 declare module "openclaw/plugin-sdk" {
-  export function createNormalizedOutboundDeliverer(
-    deliver: (payload: { text?: string; replyToId?: string | null }) => Promise<void>,
-  ): (payload: { text?: string; replyToId?: string | null }) => Promise<void>;
-
   export function createReplyPrefixOptions(params: {
     cfg: unknown;
     agentId?: string;
@@ -14,31 +10,6 @@ declare module "openclaw/plugin-sdk" {
     config: unknown;
     runtime: {
       log?: (level: string, message: string) => void;
-      system: {
-        enqueueSystemEvent: (
-          text: string,
-          options: { sessionKey: string; contextKey?: string | null },
-        ) => boolean;
-        requestHeartbeatNow: (options?: {
-          reason?: string;
-          coalesceMs?: number;
-          agentId?: string;
-          sessionKey?: string;
-        }) => void;
-        runCommandWithTimeout: (
-          argv: string[],
-          options: { timeoutMs: number; cwd?: string; input?: string; env?: Record<string, string> },
-        ) => Promise<{
-          pid?: number;
-          stdout: string;
-          stderr: string;
-          code: number | null;
-          signal: string | null;
-          killed: boolean;
-          termination: "exit" | "timeout" | "no-output-timeout" | "signal";
-          noOutputTimedOut?: boolean;
-        }>;
-      };
       channel: {
         routing: {
           resolveAgentRoute: (params: {
@@ -50,11 +21,39 @@ declare module "openclaw/plugin-sdk" {
         };
         reply: {
           finalizeInboundContext: (ctx: Record<string, unknown>) => Record<string, unknown>;
-          dispatchReplyWithBufferedBlockDispatcher: (params: {
+          createReplyDispatcherWithTyping: (params: {
+            deliver: (payload: { text?: string }, info?: { kind?: string }) => Promise<void>;
+            responsePrefix?: string;
+            responsePrefixContext?: Record<string, unknown>;
+            responsePrefixContextProvider?: () => Record<string, unknown>;
+            onHeartbeatStrip?: () => void;
+            onIdle?: () => void;
+            onError?: (err: unknown, info: { kind?: string }) => void;
+            onSkip?: (
+              payload: { text?: string },
+              info: { kind?: string; reason?: string },
+            ) => void;
+            humanDelay?: unknown;
+            typingCallbacks?: unknown;
+            onReplyStart?: () => Promise<void> | void;
+            onCleanup?: () => void;
+          }) => {
+            dispatcher: unknown;
+            replyOptions: Record<string, unknown>;
+            markDispatchIdle: () => void;
+            markRunComplete: () => void;
+          };
+          resolveHumanDelayConfig: (cfg: unknown, agentId: string) => unknown;
+          dispatchReplyFromConfig: (params: {
             ctx: Record<string, unknown>;
             cfg: unknown;
-            dispatcherOptions: Record<string, unknown>;
+            dispatcher: unknown;
             replyOptions?: Record<string, unknown>;
+          }) => Promise<unknown>;
+          withReplyDispatcher: (params: {
+            dispatcher: unknown;
+            run: () => Promise<unknown>;
+            onSettled?: () => void | Promise<void>;
           }) => Promise<unknown>;
         };
       };
