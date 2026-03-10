@@ -106,6 +106,13 @@ const plugin = {
         docsPath: "/channels/custom/sse-bridge",
         blurb: "Custom channel for OpenClaw cron delivery over HTTP POST",
       },
+      messaging: {
+        targetResolver: {
+          hint: "<chat_id[:thread_id]>",
+          // SSE Bridge targets are raw chat/thread session keys, not directory-backed contacts.
+          looksLikeId: (raw: string) => Boolean(raw.trim()),
+        },
+      },
       capabilities: {
         chatTypes: ["direct"],
         media: false,
