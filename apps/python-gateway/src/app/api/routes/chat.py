@@ -26,6 +26,7 @@ async def chat_stream(request: Request) -> StreamingResponse:
     logger.info("stream start request_id=%s session_key=%s", request_id, session_key)
 
     async def event_iter():
+        emitted_output = False
         yield encode_sse("ack", {"request_id": request_id, "session_key": session_key})
 
         acquired = await bridge_service.try_acquire_session(session_key, request_id)
@@ -79,7 +80,18 @@ async def chat_stream(request: Request) -> StreamingResponse:
 
                 if msg_type == "assistant.delta":
                     delta = bridge_msg.payload.get("text", "")
+                    emitted_output = True
                     yield encode_sse("delta", {"request_id": request_id, "text": delta})
+                    continue
+
+                if msg_type == "assistant.message_start":
+                    yield encode_sse(
+                        "message_start",
+                        {
+                            "request_id": request_id,
+                            "index": bridge_msg.payload.get("index"),
+                        },
+                    )
                     continue
 
                 if msg_type == "assistant.done":
@@ -103,6 +115,9 @@ async def chat_stream(request: Request) -> StreamingResponse:
                     continue
 
                 if msg_type == "assistant.error":
+                    if bridge_msg.payload.get("code") == "upstream_empty" and emitted_output:
+                        yield encode_sse("done", {"request_id": request_id, "usage": {}, "latency_ms": None})
+                        return
                     yield encode_sse(
                         "error",
                         {

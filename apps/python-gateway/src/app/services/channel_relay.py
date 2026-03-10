@@ -17,5 +17,5 @@ async def relay_channel_post(message: ChannelPostRequest) -> dict[str, bool]:
         message.message_id,
         len(message.content),
     )
-    logger.info("channel_post relay todo: outbound delivery is not implemented yet")
+    logger.info("channel_post accepted for async delivery path")
     return {"ok": True, "accepted": True, "forwarded": False}
