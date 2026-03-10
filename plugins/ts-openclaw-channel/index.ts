@@ -117,6 +117,7 @@ async function postChannelMessage(params: {
   to: string;
   text: string;
   accountId?: string | null;
+  logger?: Pick<OpenClawPluginApi["logger"], "info" | "warn">;
 }) {
   const { chatId, threadId } = toChatThread(params.to);
   const payload = {
@@ -133,6 +134,9 @@ async function postChannelMessage(params: {
 
   for (let attempt = 1; attempt <= CHANNEL_POST_MAX_ATTEMPTS; attempt += 1) {
     try {
+      params.logger?.info?.(
+        `[${PLUGIN_ID}] channel_post_attempt to=${params.to} chat_id=${chatId} thread_id=${threadId} attempt=${attempt}/${CHANNEL_POST_MAX_ATTEMPTS} text_len=${params.text.trim().length}`,
+      );
       const resp = await fetch(params.url, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -143,14 +147,23 @@ async function postChannelMessage(params: {
         const detail = await resp.text().catch(() => "");
         throw new Error(`channel post failed: ${resp.status} ${detail.slice(0, 200)}`);
       }
+      params.logger?.info?.(
+        `[${PLUGIN_ID}] channel_post_ok to=${params.to} chat_id=${chatId} thread_id=${threadId} attempt=${attempt}/${CHANNEL_POST_MAX_ATTEMPTS}`,
+      );
       return;
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (attempt >= CHANNEL_POST_MAX_ATTEMPTS) {
+        params.logger?.warn?.(
+          `[${PLUGIN_ID}] channel_post_fail to=${params.to} chat_id=${chatId} thread_id=${threadId} attempts=${CHANNEL_POST_MAX_ATTEMPTS} err=${detail}`,
+        );
         throw new Error(
           `channel post fetch failed url=${params.url} attempts=${CHANNEL_POST_MAX_ATTEMPTS} cause=${detail}`,
         );
       }
+      params.logger?.warn?.(
+        `[${PLUGIN_ID}] channel_post_retry to=${params.to} chat_id=${chatId} thread_id=${threadId} attempt=${attempt}/${CHANNEL_POST_MAX_ATTEMPTS} err=${detail}`,
+      );
       await sleep(Math.min(1_000, 200 * attempt));
     }
   }
@@ -242,12 +255,16 @@ const plugin = {
               chatId: ctx.to,
             };
           }
+          api.logger.info?.(
+            `[${PLUGIN_ID}] fallback_to_channel_post to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${(ctx.text ?? "").trim().length}`,
+          );
           if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
           await postChannelMessage({
             url: channelPostUrl,
             to: ctx.to,
             text: ctx.text,
             accountId: ctx.accountId,
+            logger: api.logger,
           });
           return {
             channel: CHANNEL_ID,
@@ -272,12 +289,16 @@ const plugin = {
               chatId: ctx.to,
             };
           }
+          api.logger.info?.(
+            `[${PLUGIN_ID}] fallback_to_channel_post_media to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${(`${ctx.text ?? ""}${mediaSuffix}`).trim().length}`,
+          );
           if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
           await postChannelMessage({
             url: channelPostUrl,
             to: ctx.to,
             text: `${ctx.text ?? ""}${mediaSuffix}`.trim(),
             accountId: ctx.accountId,
+            logger: api.logger,
           });
           return {
             channel: CHANNEL_ID,
@@ -331,12 +352,20 @@ const plugin = {
               liveMessageCount: 0,
               lastLiveMessageAt: Date.now(),
             });
+            api.runtime.log?.(
+              "info",
+              `[${PLUGIN_ID}] active_session_open request_id=${inbound.request_id} session_key=${sessionKey} active_sessions=${activeSessions.size}`,
+            );
             const route = api.runtime.channel.routing.resolveAgentRoute({
               cfg: api.config,
               channel: CHANNEL_ID,
               accountId: "default",
               peer: { kind: "direct", id: sessionKey },
             });
+            api.runtime.log?.(
+              "info",
+              `[${PLUGIN_ID}] route_resolved request_id=${inbound.request_id} session_key=${sessionKey} route_session=${route.sessionKey} agent_id=${route.agentId} account_id=${route.accountId}`,
+            );
 
             const ctxPayload = api.runtime.channel.reply.finalizeInboundContext({
               Body: userText,
@@ -456,6 +485,10 @@ const plugin = {
                 ctxPayload,
                 dispatcher,
                 onSettled: () => {
+                  api.runtime.log?.(
+                    "info",
+                    `[${PLUGIN_ID}] dispatch_settled request_id=${inbound.request_id} session_key=${sessionKey}`,
+                  );
                   markDispatchIdle();
                   markRunComplete();
                 },
@@ -522,12 +555,20 @@ const plugin = {
 
           const active = activeSessions.get(sessionKey);
           if (active && active.liveMessageCount === 0) {
+            api.runtime.log?.(
+              "info",
+              `[${PLUGIN_ID}] wait_for_live_send request_id=${inbound.request_id} session_key=${sessionKey} max_wait_ms=12000 idle_ms=3500`,
+            );
             await waitForLiveSendSettle(activeSessions, sessionKey, {
               maxWaitMs: 12_000,
               idleMs: 3_500,
             });
           }
           const settledActive = activeSessions.get(sessionKey);
+          api.runtime.log?.(
+            "info",
+            `[${PLUGIN_ID}] active_session_close request_id=${inbound.request_id} session_key=${sessionKey} delivered=${delivered} live_message_count=${settledActive?.liveMessageCount ?? 0}`,
+          );
           if (settledActive && settledActive.liveMessageCount > 0) {
             delivered = true;
           }
