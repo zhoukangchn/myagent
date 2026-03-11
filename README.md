@@ -1,7 +1,7 @@
 # SSE + WS Bridge Workspace
 
-- `apps/python-gateway` — FastAPI SSE gateway (Python + uv)
-- `plugins/ts-openclaw-channel` — OpenClaw channel plugin (TypeScript + npm)
+- `apps/python-gateway` - FastAPI SSE gateway (Python + uv)
+- `plugins/ts-openclaw-channel` - OpenClaw channel plugin (TypeScript + npm)
 
 ## Quick start
 
@@ -27,4 +27,5 @@ PYTHONPATH=src uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Docs
 
-- 完整说明: `docs/sse-bridge-cron-guide.zh-CN.md`
+- Full guide: `docs/sse-bridge-cron-guide.zh-CN.md`
+- Codex project memory template: `docs/codex-project-memory-template.zh-CN.md`
