@@ -1,8 +1,4 @@
-import {
-  createReplyPrefixOptions,
-  dispatchReplyFromConfigWithSettledDispatcher,
-  type OpenClawPluginApi,
-} from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { BridgeClient } from "./src/bridge-client.js";
 
 const PLUGIN_ID = "ts-openclaw-channel";
@@ -439,97 +435,70 @@ const plugin = {
               });
             };
 
-            const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
-              cfg: api.config,
-              agentId: route.agentId,
-              channel: CHANNEL_ID,
-              accountId: route.accountId,
-            });
+            const onSkip = (payload: { text?: string }, info: { kind?: string; reason?: string }) => {
+              api.runtime.log?.(
+                "warn",
+                `[${PLUGIN_ID}] skip request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} reason=${info?.reason ?? "unknown"} text_len=${(payload?.text ?? "").length}`,
+              );
+            };
 
-            const { dispatcher, replyOptions, markDispatchIdle, markRunComplete } =
-              api.runtime.channel.reply.createReplyDispatcherWithTyping({
-                ...prefixOptions,
-                humanDelay: api.runtime.channel.reply.resolveHumanDelayConfig(
-                  api.config,
-                  route.agentId,
-                ),
-                deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
-                  const text = payload.text ?? "";
-                  const kind = info?.kind ?? "unknown";
-                  if (text && (pendingRuntimeBoundaryCount > 0 || (kind === "final" && expectBoundaryOnNextDeliver))) {
-                    emitAssistantMessageStart(`deliver:${kind}`);
-                  }
-                  emitDeltaFromSnapshot(text, `deliver kind=${info?.kind ?? "unknown"}`);
-                  if (text && kind === "final") {
-                    expectBoundaryOnNextDeliver = true;
-                  }
-                },
-                onSkip: (payload: { text?: string }, info: { kind?: string; reason?: string }) => {
-                  api.runtime.log?.(
-                    "warn",
-                    `[${PLUGIN_ID}] skip request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} reason=${info?.reason ?? "unknown"} text_len=${(payload?.text ?? "").length}`,
-                  );
-                },
-                onError: (err: unknown, info: { kind?: string }) => {
-                  api.runtime.log?.(
-                    "warn",
-                    `[${PLUGIN_ID}] dispatcher error request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} err=${String(err)}`,
-                  );
-                  throw new Error(`${info.kind}: ${String(err)}`);
-                },
-              });
+            const onDispatcherError = (err: unknown, info: { kind?: string }) => {
+              api.runtime.log?.(
+                "warn",
+                `[${PLUGIN_ID}] dispatcher error request_id=${inbound.request_id} kind=${info?.kind ?? "unknown"} err=${String(err)}`,
+              );
+              throw new Error(`${info.kind}: ${String(err)}`);
+            };
+
+            const dispatchReplyWithBufferedBlockDispatcher =
+              api.runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher;
 
             await Promise.race([
-              dispatchReplyFromConfigWithSettledDispatcher({
-                cfg: api.config,
-                ctxPayload,
-                dispatcher,
-                onSettled: () => {
-                  api.runtime.log?.(
-                    "info",
-                    `[${PLUGIN_ID}] dispatch_settled request_id=${inbound.request_id} session_key=${sessionKey}`,
-                  );
-                  markDispatchIdle();
-                  markRunComplete();
-                },
-                replyOptions: {
-                  ...replyOptions,
-                  onModelSelected,
-                  onAssistantMessageStart: async () => {
-                    pendingRuntimeBoundaryCount += 1;
-                    expectBoundaryOnNextDeliver = true;
-                    lastSentText = "";
-                    api.runtime.log?.(
-                      "info",
-                      `[${PLUGIN_ID}] message_start pending request_id=${inbound.request_id} count=${pendingRuntimeBoundaryCount}`,
-                    );
-                  },
-                  onToolResult: async (payload: { text?: string; mediaUrls?: string[] }) => {
-                    const text = payload.text ?? "";
-                    expectBoundaryOnNextDeliver = true;
-                    api.runtime.log?.(
-                      "info",
-                      `[${PLUGIN_ID}] tool_result request_id=${inbound.request_id} text_len=${text.length} media_count=${payload.mediaUrls?.length ?? 0}`,
-                    );
-                    client.send({
-                      type: "tool.event",
-                      request_id: inbound.request_id,
-                      session_key: sessionKey,
-                      payload: {
-                        tool: "agent_tool_result",
-                        stage: "result",
-                        text,
-                        media_urls: payload.mediaUrls ?? [],
-                      },
-                    });
-                    if (text.trim()) {
-                      emitAssistantMessageStart("tool_result");
-                      emitDeltaFromSnapshot(text.trim(), "tool_result");
+              (async () => {
+                if (!dispatchReplyWithBufferedBlockDispatcher) {
+                  throw new Error("dispatchReplyWithBufferedBlockDispatcher is not available");
+                }
+
+                api.runtime.log?.(
+                  "info",
+                  `[${PLUGIN_ID}] reply_dispatch_mode=buffered request_id=${inbound.request_id}`,
+                );
+                await dispatchReplyWithBufferedBlockDispatcher({
+                  ctx: ctxPayload,
+                  cfg: api.config,
+                  dispatcherOptions: {
+                    deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
+                      const kind = info?.kind ?? "unknown";
+                      if (kind && kind !== "final" && kind !== "unknown") return;
+                      const text = payload.text?.trim() ?? "";
+                      if (!text) return;
+                      if (expectBoundaryOnNextDeliver) {
+                        emitAssistantMessageStart(`legacy:${kind}`);
+                      }
+                      delivered = true;
+                      lastSentText = text;
+                      client.send({
+                        type: "assistant.delta",
+                        request_id: inbound.request_id,
+                        session_key: sessionKey,
+                        payload: { text },
+                      });
                       expectBoundaryOnNextDeliver = true;
-                    }
+                    },
+                    onSkip,
+                    onError: onDispatcherError,
+                    onReplyStart: async () => {
+                      pendingRuntimeBoundaryCount += 1;
+                      expectBoundaryOnNextDeliver = true;
+                      lastSentText = "";
+                      api.runtime.log?.(
+                        "info",
+                        `[${PLUGIN_ID}] legacy_message_start pending request_id=${inbound.request_id} count=${pendingRuntimeBoundaryCount}`,
+                      );
+                    },
                   },
-                },
-              }),
+                });
+              })(),
               new Promise((_, reject) =>
                 setTimeout(() => reject(new Error("channel-inbound timeout")), REQUEST_TIMEOUT_MS),
               ),
