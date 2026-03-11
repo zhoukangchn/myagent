@@ -19,6 +19,9 @@ OpenClaw channel plugin:
 | `BRIDGE_OPENCLAW_AGENT_ID` | `main` | Agent ID for routing |
 | `BRIDGE_REQUEST_TIMEOUT_MS` | `120000` | Request timeout |
 | `SSE_CHANNEL_DEFAULT_TO` | (empty) | Fallback `chat_id:thread_id` |
+| `SSE_BRIDGE_HUMAN_DELAY_MODE` | `off` | Buffered reply human delay: `off`, `natural`, `custom` |
+| `SSE_BRIDGE_HUMAN_DELAY_MIN_MS` | `800` | Min delay when `SSE_BRIDGE_HUMAN_DELAY_MODE=custom` |
+| `SSE_BRIDGE_HUMAN_DELAY_MAX_MS` | `2500` | Max delay when `SSE_BRIDGE_HUMAN_DELAY_MODE=custom` |
 
 ## Install
 
@@ -31,6 +34,11 @@ OpenClaw channel plugin:
 ```bash
 npm install && npm run check
 ```
+
+## TODO
+
+- Add a per-session outbound send queue for live `sendText`/`sendMedia` so multi-message replies can be intentionally spaced.
+- Current `humanDelay` only affects OpenClaw buffered reply blocks; it does not slow down agent-driven consecutive outbound sends.
 
 ## Full guide
 

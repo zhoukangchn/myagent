@@ -1,4 +1,9 @@
 declare module "openclaw/plugin-sdk" {
+  type HumanDelayConfig =
+    | { mode: "off" }
+    | { mode: "natural" }
+    | { mode: "custom"; minMs?: number; maxMs?: number };
+
   export interface OpenClawPluginApi {
     config: unknown;
     runtime: {
@@ -17,7 +22,16 @@ declare module "openclaw/plugin-sdk" {
           dispatchReplyWithBufferedBlockDispatcher: (params: {
             ctx: Record<string, unknown>;
             cfg: unknown;
-            dispatcherOptions: Record<string, unknown>;
+            dispatcherOptions: {
+              deliver: (payload: { text?: string }, info?: { kind?: string }) => Promise<void>;
+              onSkip?: (payload: { text?: string }, info: { kind?: string; reason?: string }) => void;
+              onError?: (err: unknown, info: { kind?: string }) => void;
+              onReplyStart?: () => Promise<void> | void;
+              humanDelay?: HumanDelayConfig;
+            };
+            replyOptions?: {
+              onAssistantMessageStart?: () => Promise<void> | void;
+            };
           }) => Promise<unknown>;
         };
       };

@@ -6,6 +6,8 @@ const CHANNEL_ID = "sse_bridge";
 const DEFAULT_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_CHANNEL_POST_TIMEOUT_MS = 5_000;
 const DEFAULT_CHANNEL_POST_MAX_ATTEMPTS = 3;
+const DEFAULT_HUMAN_DELAY_MIN_MS = 800;
+const DEFAULT_HUMAN_DELAY_MAX_MS = 2_500;
 
 function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name]?.trim();
@@ -22,6 +24,15 @@ const CHANNEL_POST_TIMEOUT_MS = readPositiveIntEnv(
 const CHANNEL_POST_MAX_ATTEMPTS = readPositiveIntEnv(
   "SSE_CHANNEL_POST_MAX_ATTEMPTS",
   DEFAULT_CHANNEL_POST_MAX_ATTEMPTS,
+);
+const HUMAN_DELAY_MODE = (process.env.SSE_BRIDGE_HUMAN_DELAY_MODE ?? "off").trim().toLowerCase();
+const HUMAN_DELAY_MIN_MS = readPositiveIntEnv(
+  "SSE_BRIDGE_HUMAN_DELAY_MIN_MS",
+  DEFAULT_HUMAN_DELAY_MIN_MS,
+);
+const HUMAN_DELAY_MAX_MS = readPositiveIntEnv(
+  "SSE_BRIDGE_HUMAN_DELAY_MAX_MS",
+  DEFAULT_HUMAN_DELAY_MAX_MS,
 );
 
 function sleep(ms: number): Promise<void> {
@@ -41,6 +52,11 @@ type ActiveSession = {
   liveMessageCount: number;
   lastLiveMessageAt: number;
 };
+
+type HumanDelayConfig =
+  | { mode: "off" }
+  | { mode: "natural" }
+  | { mode: "custom"; minMs: number; maxMs: number };
 
 function getSharedActiveSessions(): Map<string, ActiveSession> {
   const globalKey = "__ts_openclaw_channel_active_sessions__";
@@ -87,6 +103,20 @@ function toChatThread(sessionKey: string): { chatId: string; threadId: string } 
     chatId: sessionKey.slice(0, idx),
     threadId: sessionKey.slice(idx + 1) || "root",
   };
+}
+
+function resolveHumanDelayConfig(): HumanDelayConfig {
+  if (HUMAN_DELAY_MODE === "natural") {
+    return { mode: "natural" };
+  }
+  if (HUMAN_DELAY_MODE === "custom") {
+    return {
+      mode: "custom",
+      minMs: HUMAN_DELAY_MIN_MS,
+      maxMs: Math.max(HUMAN_DELAY_MIN_MS, HUMAN_DELAY_MAX_MS),
+    };
+  }
+  return { mode: "off" };
 }
 
 async function waitForLiveSendSettle(
@@ -384,9 +414,10 @@ const plugin = {
             });
 
             const dispatchStart = Date.now();
+            const humanDelay = resolveHumanDelayConfig();
             api.runtime.log?.(
               "info",
-              `[${PLUGIN_ID}] dispatch start request_id=${inbound.request_id} session_key=${sessionKey}`,
+              `[${PLUGIN_ID}] dispatch start request_id=${inbound.request_id} session_key=${sessionKey} human_delay_mode=${humanDelay.mode}`,
             );
 
             const emitAssistantMessageStart = (source: string) => {
@@ -467,6 +498,7 @@ const plugin = {
                   ctx: ctxPayload,
                   cfg: api.config,
                   dispatcherOptions: {
+                    humanDelay,
                     deliver: async (payload: { text?: string }, info?: { kind?: string }) => {
                       const kind = info?.kind ?? "unknown";
                       if (kind && kind !== "final" && kind !== "unknown") return;
@@ -488,12 +520,22 @@ const plugin = {
                     onSkip,
                     onError: onDispatcherError,
                     onReplyStart: async () => {
+                      if (messageIndex > 0 || pendingRuntimeBoundaryCount > 0) return;
+                      expectBoundaryOnNextDeliver = true;
+                      api.runtime.log?.(
+                        "info",
+                        `[${PLUGIN_ID}] reply_start request_id=${inbound.request_id} source=fallback_first_message`,
+                      );
+                    },
+                  },
+                  replyOptions: {
+                    onAssistantMessageStart: async () => {
                       pendingRuntimeBoundaryCount += 1;
                       expectBoundaryOnNextDeliver = true;
                       lastSentText = "";
                       api.runtime.log?.(
                         "info",
-                        `[${PLUGIN_ID}] legacy_message_start pending request_id=${inbound.request_id} count=${pendingRuntimeBoundaryCount}`,
+                        `[${PLUGIN_ID}] runtime_message_start request_id=${inbound.request_id} pending=${pendingRuntimeBoundaryCount}`,
                       );
                     },
                   },
