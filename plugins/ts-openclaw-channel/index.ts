@@ -39,6 +39,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function safeText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  return String(value);
+}
+
+function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timer),
+  };
+}
+
 type InboundUserMessage = {
   type: "user.message";
   request_id: string;
@@ -160,6 +175,7 @@ async function postChannelMessage(params: {
 
   for (let attempt = 1; attempt <= CHANNEL_POST_MAX_ATTEMPTS; attempt += 1) {
     try {
+      const { signal, cleanup } = createTimeoutSignal(CHANNEL_POST_TIMEOUT_MS);
       params.logger?.info?.(
         `[${PLUGIN_ID}] channel_post_attempt to=${params.to} chat_id=${chatId} thread_id=${threadId} attempt=${attempt}/${CHANNEL_POST_MAX_ATTEMPTS} text_len=${params.text.trim().length}`,
       );
@@ -167,8 +183,8 @@ async function postChannelMessage(params: {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(CHANNEL_POST_TIMEOUT_MS),
-      });
+        signal,
+      }).finally(cleanup);
       if (!resp.ok) {
         const detail = await resp.text().catch(() => "");
         throw new Error(`channel post failed: ${resp.status} ${detail.slice(0, 200)}`);
@@ -271,10 +287,19 @@ const plugin = {
           return { ok: true, to: target };
         },
         sendText: async (ctx: { to: string; text: string; accountId?: string | null }) => {
+          const text = safeText(ctx.text).trim();
           api.logger.info?.(
-            `[${PLUGIN_ID}] outbound_send_text to=${ctx.to} text_len=${(ctx.text ?? "").trim().length}`,
+            `[${PLUGIN_ID}] outbound_send_text to=${ctx.to} text_len=${text.length}`,
           );
-          if (emitActiveSessionMessage(ctx.to, ctx.text)) {
+          if (!text) {
+            api.logger.warn?.(`[${PLUGIN_ID}] outbound_send_text skipped to=${ctx.to} reason=empty_text`);
+            return {
+              channel: CHANNEL_ID,
+              messageId: `sse-skip-${Date.now()}`,
+              chatId: ctx.to,
+            };
+          }
+          if (emitActiveSessionMessage(ctx.to, text)) {
             return {
               channel: CHANNEL_ID,
               messageId: `sse-live-${Date.now()}`,
@@ -282,13 +307,13 @@ const plugin = {
             };
           }
           api.logger.info?.(
-            `[${PLUGIN_ID}] fallback_to_channel_post to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${(ctx.text ?? "").trim().length}`,
+            `[${PLUGIN_ID}] fallback_to_channel_post to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${text.length}`,
           );
           if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
           await postChannelMessage({
             url: channelPostUrl,
             to: ctx.to,
-            text: ctx.text,
+            text,
             accountId: ctx.accountId,
             logger: api.logger,
           });
@@ -304,11 +329,22 @@ const plugin = {
           mediaUrl?: string | null;
           accountId?: string | null;
         }) => {
-          const mediaSuffix = ctx.mediaUrl ? `\n${ctx.mediaUrl}` : "";
+          const mediaText = safeText(ctx.text).trim();
+          const mediaUrl = safeText(ctx.mediaUrl).trim();
+          const mediaSuffix = mediaUrl ? `\n${mediaUrl}` : "";
+          const combinedText = `${mediaText}${mediaSuffix}`.trim();
           api.logger.info?.(
-            `[${PLUGIN_ID}] outbound_send_media to=${ctx.to} text_len=${(`${ctx.text ?? ""}${mediaSuffix}`).trim().length}`,
+            `[${PLUGIN_ID}] outbound_send_media to=${ctx.to} text_len=${combinedText.length}`,
           );
-          if (emitActiveSessionMessage(ctx.to, `${ctx.text ?? ""}${mediaSuffix}`.trim())) {
+          if (!combinedText) {
+            api.logger.warn?.(`[${PLUGIN_ID}] outbound_send_media skipped to=${ctx.to} reason=empty_text`);
+            return {
+              channel: CHANNEL_ID,
+              messageId: `sse-skip-${Date.now()}`,
+              chatId: ctx.to,
+            };
+          }
+          if (emitActiveSessionMessage(ctx.to, combinedText)) {
             return {
               channel: CHANNEL_ID,
               messageId: `sse-live-${Date.now()}`,
@@ -316,13 +352,13 @@ const plugin = {
             };
           }
           api.logger.info?.(
-            `[${PLUGIN_ID}] fallback_to_channel_post_media to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${(`${ctx.text ?? ""}${mediaSuffix}`).trim().length}`,
+            `[${PLUGIN_ID}] fallback_to_channel_post_media to=${ctx.to} account_id=${ctx.accountId ?? "default"} reason=no_active_live_session text_len=${combinedText.length}`,
           );
           if (!channelPostUrl.trim()) throw new Error("SSE_CHANNEL_POST_URL is empty");
           await postChannelMessage({
             url: channelPostUrl,
             to: ctx.to,
-            text: `${ctx.text ?? ""}${mediaSuffix}`.trim(),
+            text: combinedText,
             accountId: ctx.accountId,
             logger: api.logger,
           });
