@@ -1,19 +1,14 @@
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
-from uuid import uuid4
-
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from app.main import bridge_service, settings
-from app.models.schemas import BridgeMessage, ChatStreamRequest
+from app.models.schemas import ChatStreamRequest
+from app.services.chat_flow import stream_chat_request
 from app.utils.sse import encode_sse
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 @router.post("/v1/chat/stream")
@@ -21,114 +16,53 @@ async def chat_stream(request: Request) -> StreamingResponse:
     body = await request.body()
     payload = ChatStreamRequest.model_validate_json(body)
 
-    request_id = str(uuid4())
-    session_key = f"{payload.chat_id}:{payload.thread_id}"
-    logger.info("stream start request_id=%s session_key=%s", request_id, session_key)
-
     async def event_iter():
-        emitted_output = False
-        yield encode_sse("ack", {"request_id": request_id, "session_key": session_key})
-
-        acquired = await bridge_service.try_acquire_session(session_key, request_id)
-        if not acquired:
-            yield encode_sse(
-                "error",
-                {
-                    "request_id": request_id,
-                    "code": "session_busy",
-                    "message": "previous request is still running for this session",
-                },
-            )
-            return
-
-        is_connected = await bridge_service.is_openclaw_connected()
-        if not is_connected:
-            yield encode_sse("error", {"request_id": request_id, "code": "upstream_unavailable"})
-            await bridge_service.release_session(session_key, request_id)
-            return
-
-        q = await bridge_service.register_stream(request_id)
-        try:
-            outgoing = {
-                "type": "user.message",
-                "request_id": request_id,
-                "session_key": session_key,
-                "seq": 1,
-                "payload": payload.model_dump(),
-            }
-            logger.info("send_to_openclaw request_id=%s msg=%s", request_id, json.dumps(outgoing, ensure_ascii=False))
-            await bridge_service.send_to_openclaw(outgoing)
-            while True:
-                try:
-                    msg = await asyncio.wait_for(q.get(), timeout=settings.stream_timeout_sec)
-                except TimeoutError:
-                    yield encode_sse(
-                        "error",
-                        {
-                            "request_id": request_id,
-                            "code": "upstream_timeout",
-                            "message": "OpenClaw did not respond in time",
-                        },
-                    )
-                    return
-
-                bridge_msg = BridgeMessage.model_validate(msg)
-                msg_type = bridge_msg.type
-                raw_payload = json.dumps(bridge_msg.payload, ensure_ascii=False)
-                payload_preview = raw_payload if len(raw_payload) <= 300 else raw_payload[:300] + "...(truncated)"
-                logger.info("stream recv request_id=%s msg_type=%s payload=%s", request_id, msg_type, payload_preview)
-
-                if msg_type == "assistant.delta":
-                    delta = bridge_msg.payload.get("text", "")
-                    emitted_output = True
-                    yield encode_sse("delta", {"request_id": request_id, "text": delta})
-                    continue
-
-                if msg_type == "assistant.message_start":
-                    yield encode_sse(
-                        "message_start",
-                        {
-                            "request_id": request_id,
-                            "index": bridge_msg.payload.get("index"),
-                        },
-                    )
-                    continue
-
-                if msg_type == "assistant.done":
-                    done = {
+        async for event in stream_chat_request(
+            bridge_service,
+            payload=payload,
+            stream_timeout_sec=settings.stream_timeout_sec,
+        ):
+            msg_type = event["type"]
+            request_id = str(event["request_id"])
+            payload_data = event.get("payload") or {}
+            if msg_type == "gateway.ack":
+                yield encode_sse("ack", {"request_id": request_id, "session_key": event.get("session_key")})
+                continue
+            if msg_type == "assistant.delta":
+                yield encode_sse("delta", {"request_id": request_id, "text": payload_data.get("text", "")})
+                continue
+            if msg_type == "assistant.message_start":
+                yield encode_sse("message_start", {"request_id": request_id, "index": payload_data.get("index")})
+                continue
+            if msg_type == "assistant.done":
+                yield encode_sse(
+                    "done",
+                    {
                         "request_id": request_id,
-                        "usage": bridge_msg.payload.get("usage", {}),
-                        "latency_ms": bridge_msg.payload.get("latency_ms"),
-                    }
-                    yield encode_sse("done", done)
-                    return
-
-                if msg_type == "tool.event":
-                    yield encode_sse(
-                        "tool_event",
-                        {
-                            "request_id": request_id,
-                            "tool": bridge_msg.payload.get("tool"),
-                            "data": bridge_msg.payload,
-                        },
-                    )
-                    continue
-
-                if msg_type == "assistant.error":
-                    if bridge_msg.payload.get("code") == "upstream_empty" and emitted_output:
-                        yield encode_sse("done", {"request_id": request_id, "usage": {}, "latency_ms": None})
-                        return
-                    yield encode_sse(
-                        "error",
-                        {
-                            "request_id": request_id,
-                            "code": bridge_msg.payload.get("code", "upstream_error"),
-                            "message": bridge_msg.payload.get("message", "unknown upstream error"),
-                        },
-                    )
-                    return
-        finally:
-            await bridge_service.unregister_stream(request_id)
-            await bridge_service.release_session(session_key, request_id)
+                        "usage": payload_data.get("usage", {}),
+                        "latency_ms": payload_data.get("latency_ms"),
+                    },
+                )
+                return
+            if msg_type == "tool.event":
+                yield encode_sse(
+                    "tool_event",
+                    {
+                        "request_id": request_id,
+                        "tool": payload_data.get("tool"),
+                        "data": payload_data,
+                    },
+                )
+                continue
+            if msg_type == "assistant.error":
+                yield encode_sse(
+                    "error",
+                    {
+                        "request_id": request_id,
+                        "code": payload_data.get("code", "upstream_error"),
+                        "message": payload_data.get("message", "unknown upstream error"),
+                    },
+                )
+                return
 
     return StreamingResponse(event_iter(), media_type="text/event-stream")
